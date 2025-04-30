@@ -32,6 +32,9 @@ class Propositionalization:
     
     def __len__(self):
         return len(self.v)
+    
+def str_from_prop(prop, j):
+    return f'x{prop.v[j]+1} {'>=' if prop.s[j]==1 else '<='} {prop.s[j]*prop.t[j]:0.3f}'
 
 def equal_frequency_propositionalization(x, k=None):
     n, d = x.shape
