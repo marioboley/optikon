@@ -9,11 +9,56 @@ from numba import njit
 from numba.experimental import jitclass
 from numba.types import int64, float64
 
+### Utility ###
+###############
 
-##### Propositionaliation ####
+@njit
+def compute_bounds(x):
+    """
+    Compute per-variable bounds over a dataset.
+
+    Args:
+        x (ndarray): Data matrix of shape (n, d), where each row is a sample 
+        and each column is a variable.
+
+    Returns:
+        Tuple[ndarray, ndarray]: A pair (l, u) of arrays, each of shape (d,), where 
+        l[j] is the minimum and u[j] is the maximum of variable j over all n samples.
+
+    Examples:
+        >>> x = np.array([[1.0, -1.0], [0.0, 0.0]])
+        >>> compute_bounds(x)
+        (array([0.0, -1.0]), array([1.0, 0.0]))
+    """
+    n, d = x.shape
+    l = np.empty(d)
+    u = np.empty(d)
+    for j in range(d):
+        l[j] = x[0, j]
+        u[j] = x[0, j]
+    for i in range(1, n):
+        for j in range(d):
+            if x[i, j] < l[j]:
+                l[j] = x[i, j]
+            if x[i, j] > u[j]:
+                u[j] = x[i, j]
+    return l, u
+
+compute_bounds.compile("(float64[:, :],)")
+
+##### Propositionaliation #####
+###############################
 
 @jitclass
 class Propositionalization:
+    """
+    Represents a fixed propositionalization over a d-dimensional dataset.
+
+    Each of the p propositions represents an inequality s*x_v >= t defined by:
+      - a variable index v in {0, ..., d-1},
+      - a float64 threshold t,
+      - and a sign s in {-1, 1} indicating the direction of comparison.
+    """
 
     v: int64[:]
     t: float64[:]
@@ -27,10 +72,102 @@ class Propositionalization:
     def support(self, p, x):
         return np.flatnonzero(self.s[p]*x[:,self.v[p]] >= self.t[p])
     
+    def trivial(prop, l, u, subset):
+        """
+        Identify trivial (tautological) propositions over the given variable bounds.
+
+        Args:
+            l (ndarray): Lower bounds for each of the d variables (shape: [d]).
+            u (ndarray): Upper bounds for each of the d variables (shape: [d]).
+            subset (ndarray): Indices of the propositions to check (shape: [m], values in [0, p)).
+
+        Returns:
+            ndarray: Indices in `subset` of propositions that are tautological 
+            (i.e., always satisfied given the bounds).
+
+        Examples:
+            >>> from opticon import Propositionalization
+            >>> import numpy as np
+            >>> prop = Propositionalization(np.array([0, 1]), np.array([0.5, -1.0]), np.array([1, -1]))
+            >>> l = np.array([0.0, -2.0])
+            >>> u = np.array([1.0, 0.0])
+            >>> prop.tautologies(l, u, np.array([0, 1]))
+            array([1])
+        """
+        v = prop.v[subset]
+        t = prop.t[subset]
+        s = prop.s[subset]
+
+        res = np.zeros(len(subset), dtype=np.bool_)
+
+        lower = s == 1
+        upper = s == -1
+
+        res[lower] = l[v[lower]] >= t[lower]
+        res[upper] = -u[v[upper]] >= t[upper]
+
+        return np.flatnonzero(res)
+
+    def nontrivial(prop, l, u, subset):
+        """
+        Identify propositions that are not tautological over the given variable bounds.
+
+        Args:
+            l (ndarray): Lower bounds for each of the d variables (shape: [d]).
+            u (ndarray): Upper bounds for each of the d variables (shape: [d]).
+            subset (ndarray): Indices of the propositions to check (shape: [m], values in {0, ..., p-1}).
+
+        Returns:
+            ndarray: Indices in `subset` of propositions that are not tautological
+            (i.e., not always satisfied under the given bounds).
+
+        Examples:
+            >>> from opticon import Propositionalization
+            >>> import numpy as np
+            >>> prop = Propositionalization(np.array([0, 1]), np.array([0.5, -1.0]), np.array([1, -1]))
+            >>> l = np.array([0.0, -2.0])
+            >>> u = np.array([1.0, 0.0])
+            >>> nontrivial(prop, l, u, np.array([0, 1]))
+            array([0])
+        """
+        v = prop.v[subset]
+        t = prop.t[subset]
+        s = prop.s[subset]
+
+        res = np.zeros(len(subset), dtype=np.bool_)
+
+        lower = s == 1
+        upper = s == -1
+
+        res[lower] = l[v[lower]] < t[lower]
+        res[upper] = -u[v[upper]] < t[upper]
+
+        return np.flatnonzero(res) 
+    
     def binarize(self, x):
+        """
+        Binarizes a dataset based on the propositionalisation.
+
+        Args:
+            x (ndarray): Data matrix of shape (n, d), where each row is a sample.
+
+        Returns:
+            ndarray: Binary matrix of shape (n, p), where entry (i, j) is 1 if 
+            the j-th proposition is satisfied by the i-th sample, and 0 otherwise.
+        """        
         return self.s*x[:, self.v] >= self.t
     
     def __len__(self):
+        """
+        Returns the number of propositions (p) in this propositionalization.
+
+        Returns:
+            int: Total number of propositions.
+
+        Examples:
+            >>> len(prop)
+            2
+        """
         return len(self.v)
     
 def str_from_prop(prop, j):
@@ -106,6 +243,7 @@ def equal_width_propositionalization_sorted(x_sorted):
     return Propositionalization(np.concatenate((v, v)), np.concatenate((t, -t)), s)
 
 equal_width_propositionalization_sorted.compile("(float64[:, :],)")
+
 
 if __name__=='__main__':
     import doctest
