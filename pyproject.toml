@@ -1,5 +1,5 @@
 [project]
-name = "opticon"
+name = "optikon"
 version = "0.0.1"
 description = "Optimisation of conjunctions of propositions about numerical data"
 authors = [{ name = "Mario Boley", email = "mario.boley@gmail.com" }]
@@ -15,4 +15,4 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-py-modules = ["opticon"]
+py-modules = ["optikon"]
