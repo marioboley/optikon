@@ -1,4 +1,4 @@
-"""Module opticon for finding optimal conjunction of propositions about numerical data.
+"""Module optikon for finding optimal conjunction of propositions about numerical data.
 
 (c) Mario Boley
 """
@@ -37,7 +37,7 @@ def compute_bounds(x):
         l[j] = x[0, j]
         u[j] = x[0, j]
     for i in range(1, n):
-        for j in range(d):
+        for j in range(d): # TODO: benchmark loop inversion with parallelisation
             if x[i, j] < l[j]:
                 l[j] = x[i, j]
             if x[i, j] > u[j]:
