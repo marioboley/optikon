@@ -25,18 +25,24 @@ def compute_bounds(x):
         Tuple[ndarray, ndarray]: A pair (l, u) of arrays, each of shape (d,), where 
         l[j] is the minimum and u[j] is the maximum of variable j over all n samples.
 
+    Notes:
+        If the input has zero rows (n == 0), the returned bounds are (inf, -inf) 
+        for each variable. This convention ensures that all propositions are 
+        treated as trivially satisfied on the empty domain.
+
     Examples:
         >>> x = np.array([[1.0, -1.0], [0.0, 0.0]])
         >>> compute_bounds(x)
         (array([ 0., -1.]), array([1., 0.]))
+
+        >>> x = np.empty((0, 2))
+        >>> compute_bounds(x)
+        (array([inf, inf]), array([-inf, -inf]))
     """
     n, d = x.shape
-    l = np.empty(d)
-    u = np.empty(d)
-    for j in range(d):
-        l[j] = x[0, j]
-        u[j] = x[0, j]
-    for i in range(1, n):
+    l = np.full(d, np.inf)
+    u = np.full(d, -np.inf)
+    for i in range(n):
         for j in range(d): # TODO: benchmark loop inversion with parallelisation
             if x[i, j] < l[j]:
                 l[j] = x[i, j]
@@ -106,7 +112,7 @@ class Propositionalization:
         res[lower] = l[v[lower]] >= t[lower]
         res[upper] = -u[v[upper]] >= t[upper]
 
-        return np.flatnonzero(res)
+        return subset[res] #return np.flatnonzero(res)
 
     def nontrivial(prop, l, u, subset):
         """
@@ -142,7 +148,7 @@ class Propositionalization:
         res[lower] = l[v[lower]] < t[lower]
         res[upper] = -u[v[upper]] < t[upper]
 
-        return np.flatnonzero(res) 
+        return subset[res]# np.flatnonzero(res) 
     
     def binarize(self, x):
         """
@@ -169,9 +175,63 @@ class Propositionalization:
             2
         """
         return len(self.v)
-    
+
+# @njit
+# def str_from_prop(prop, j):
+#     return f'x{prop.v[j]+1} {'>=' if prop.s[j]==1 else '<='} {prop.s[j]*prop.t[j]:0.3f}'
+
+@njit
 def str_from_prop(prop, j):
-    return f'x{prop.v[j]+1} {'>=' if prop.s[j]==1 else '<='} {prop.s[j]*prop.t[j]:0.3f}'
+    """
+    Numba-compatible string construction for proposition j with manual float formatting.
+    Output format: "x{v+1} >= int.frac" or "x{v+1} <= int.frac"
+    """
+    v_idx = prop.v[j] + 1
+    sign = ">=" if prop.s[j] == 1 else "<="
+    value = prop.s[j] * prop.t[j]
+
+    int_part = int(value)
+    frac_part = int((abs(value) - abs(int_part)) * 1000 + 0.5)
+
+    int_str = str(int_part)
+    frac_str = str(frac_part).rjust(3, "0")
+
+    return "x" + str(v_idx) + " " + sign + " " + int_str + "." + frac_str
+
+def full_propositionalization(x):
+    """
+    Constructs propositionalization with all non-trivial threshold propositions from x in
+    lexicographic order by (v, t, s).
+    """
+    n, d = x.shape
+    max_props = 2 * n * d
+    v_out = np.empty(max_props, dtype=np.int64)
+    t_out = np.empty(max_props, dtype=np.float64)
+    s_out = np.empty(max_props, dtype=np.int64)
+    count = 0
+
+    for v in range(d):
+        thresholds = np.unique(x[:, v])
+        lo = thresholds[0]
+        hi = thresholds[-1]
+
+        for i in range(thresholds.shape[0]):
+            t = thresholds[i]
+            if t > lo:
+                v_out[count] = v
+                t_out[count] = t
+                s_out[count] = 1
+                count += 1
+
+        for i in range(thresholds.shape[0]):
+            t = thresholds[i]        
+            if t < hi:
+                v_out[count] = v
+                t_out[count] = -t
+                s_out[count] = -1
+                count += 1
+
+    return Propositionalization(v_out[:count], t_out[:count], s_out[:count])
 
 def equal_frequency_propositionalization(x, k=None):
     n, d = x.shape
@@ -197,9 +257,10 @@ def equal_width_propositionalization(x):
 def equal_width_propositionalization_sorted(x_sorted):
     n, d = x_sorted.shape
 
-    max_possible = d * n
+    max_possible = 2 * d * n
     v = np.empty(max_possible, dtype=np.int64)
     t = np.empty(max_possible, dtype=np.float64)
+    s = np.empty(max_possible, dtype=np.int64)
     idx = 0
 
     for j in range(d):
@@ -233,14 +294,21 @@ def equal_width_propositionalization_sorted(x_sorted):
 
         for k in range(len(edges)):
             if nontrivial[k]:
+                # upper bound first (s=1, decreasing thresholds)
                 v[idx] = j
-                t[idx] = edges[k]
+                t[idx] = edges[len(edges) - 1 - k]
+                s[idx] = 1
                 idx += 1
 
-    v = v[:idx]
-    t = t[:idx]
-    s = np.repeat(np.array([1, -1], dtype=np.int64), len(v))
-    return Propositionalization(np.concatenate((v, v)), np.concatenate((t, -t)), s)
+        for k in range(len(edges)):
+            if nontrivial[k]:
+                # lower bound second (s=-1, increasing thresholds)
+                v[idx] = j
+                t[idx] = -edges[k]
+                s[idx] = -1
+                idx += 1
+
+    return Propositionalization(v[:idx], t[:idx], s[:idx])
 
 equal_width_propositionalization_sorted.compile("(float64[:, :],)")
 
