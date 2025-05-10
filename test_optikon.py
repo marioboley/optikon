@@ -7,3 +7,11 @@ def test_compute_bounds_nonempty():
     assert np.allclose(l, [0., -1.])
     assert np.allclose(u, [1., 2.])
 
+def test_compute_bounds_empty():
+    x = np.empty((0, 3))
+    l, u = compute_bounds(x)
+    assert l.shape == (3,)
+    assert u.shape == (3,)
+    assert np.all(np.isposinf(l))
+    assert np.all(np.isneginf(u))
+    
