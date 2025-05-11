@@ -187,16 +187,25 @@ def str_from_prop(prop, j):
     Output format: "x{v+1} >= int.frac" or "x{v+1} <= int.frac"
     """
     v_idx = prop.v[j] + 1
-    sign = ">=" if prop.s[j] == 1 else "<="
+    sign = '>=' if prop.s[j] == 1 else '<='
     value = prop.s[j] * prop.t[j]
 
     int_part = int(value)
     frac_part = int((abs(value) - abs(int_part)) * 1000 + 0.5)
 
     int_str = str(int_part)
-    frac_str = str(frac_part).rjust(3, "0")
+    frac_str = str(frac_part).rjust(3, '0')
 
-    return "x" + str(v_idx) + " " + sign + " " + int_str + "." + frac_str
+    return 'x' + str(v_idx) + ' ' + sign + ' ' + int_str + '.' + frac_str
+
+@njit
+def str_from_conj(prop, q):
+    result = ''
+    for i in range(len(q)):
+        if i > 0:
+            result += ' & '
+        result += str_from_prop(prop, q[i])
+    return result
 
 def full_propositionalization(x):
     """
@@ -212,24 +221,18 @@ def full_propositionalization(x):
 
     for v in range(d):
         thresholds = np.unique(x[:, v])
-        lo = thresholds[0]
-        hi = thresholds[-1]
-
-        for i in range(thresholds.shape[0]):
-            t = thresholds[i]
-            if t > lo:
-                v_out[count] = v
-                t_out[count] = t
-                s_out[count] = 1
-                count += 1
-
-        for i in range(thresholds.shape[0]):
-            t = thresholds[i]        
-            if t < hi:
-                v_out[count] = v
-                t_out[count] = -t
-                s_out[count] = -1
-                count += 1
+        # lower bounds strictest to weakest, exluding trivial 
+        for t in thresholds[n-1:0:-1]:  
+            v_out[count] = v
+            t_out[count] = t
+            s_out[count] = 1
+            count += 1
+        # upper bounds: strictest to weeakest, excluding trivial
+        for t in thresholds[:-1]:  
+            v_out[count] = v
+            t_out[count] = -t
+            s_out[count] = -1
+            count += 1
 
     return Propositionalization(v_out[:count], t_out[:count], s_out[:count])
 
