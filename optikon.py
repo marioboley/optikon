@@ -180,32 +180,32 @@ class Propositionalization:
 # def str_from_prop(prop, j):
 #     return f'x{prop.v[j]+1} {'>=' if prop.s[j]==1 else '<='} {prop.s[j]*prop.t[j]:0.3f}'
 
-@njit
-def str_from_prop(prop, j):
-    """
-    Numba-compatible string construction for proposition j with manual float formatting.
-    Output format: "x{v+1} >= int.frac" or "x{v+1} <= int.frac"
-    """
-    v_idx = prop.v[j] + 1
-    sign = '>=' if prop.s[j] == 1 else '<='
-    value = prop.s[j] * prop.t[j]
+    # @njit
+    def str_from_prop(prop, j):
+        """
+        Numba-compatible string construction for proposition j with manual float formatting.
+        Output format: "x{v+1} >= int.frac" or "x{v+1} <= int.frac"
+        """
+        v_idx = prop.v[j] + 1
+        sign = '>=' if prop.s[j] == 1 else '<='
+        value = prop.s[j] * prop.t[j]
 
-    int_part = int(value)
-    frac_part = int((abs(value) - abs(int_part)) * 1000 + 0.5)
+        int_part = int(value)
+        frac_part = int((abs(value) - abs(int_part)) * 1000 + 0.5)
 
-    int_str = str(int_part)
-    frac_str = str(frac_part).rjust(3, '0')
+        int_str = str(int_part)
+        frac_str = str(frac_part).rjust(3, '0')
 
-    return 'x' + str(v_idx) + ' ' + sign + ' ' + int_str + '.' + frac_str
+        return 'x' + str(v_idx) + ' ' + sign + ' ' + int_str + '.' + frac_str
 
-@njit
-def str_from_conj(prop, q):
-    result = ''
-    for i in range(len(q)):
-        if i > 0:
-            result += ' & '
-        result += str_from_prop(prop, q[i])
-    return result
+    # @njit
+    def str_from_conj(prop, q):
+        result = ''
+        for i in range(len(q)):
+            if i > 0:
+                result += ' & '
+            result += prop.str_from_prop(q[i])
+        return result
 
 def full_propositionalization(x):
     """
