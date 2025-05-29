@@ -1,5 +1,50 @@
 import numpy as np
+from optikon import full_propositionalization
 
 def mvn_with_correlation(n, seed=0):
     rng = np.random.default_rng(seed=seed)
     return rng.multivariate_normal([0, 0, 0, 0], [[1, 0.5, -0.5, -0.5],[0.5, 1, -0.5, -0.5], [-0.5, -0.5, 1, 0.5], [-0.5, -0.5, 0.5, 1]], size=n)
+
+class TestInput:
+
+    def __init__(self, x, prop, selectable_sups):
+        self.x = x
+        self.prop = prop
+        self.selectable_sups = selectable_sups
+
+_CORRELATED_UNCORRELATED_OUTLIER_x = np.array([
+                [0.0, 1.0, 3.0],
+                [1.0, 2.0, 2.0],
+                [2.0, 3.0, 1.0],
+                [3.0, 4.0, 0.0],
+                [4.0, 5.0, 4.0],
+            ])
+
+CORRELATED_UNCORRELATED_OUTLIER = TestInput(
+    _CORRELATED_UNCORRELATED_OUTLIER_x,
+    full_propositionalization(_CORRELATED_UNCORRELATED_OUTLIER_x),
+    [
+    [0, 1, 2, 3, 4],
+    [0, 1, 2, 3],
+    [0, 1, 2],
+    [0, 1],
+    [0],
+    [],
+    [1, 2, 3, 4],
+    [1, 2, 3],
+    [1, 2],
+    [1],
+    [2, 3, 4],
+    [2, 3],
+    [2],
+    [3, 4],
+    [3],
+    [4],
+    [0, 1, 2, 4],
+    [0, 1, 4],
+    [0, 4],
+    [1, 2, 4],
+    [1, 4],
+    [2, 4]
+    ]
+)
