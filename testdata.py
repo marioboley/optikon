@@ -7,8 +7,9 @@ def mvn_with_correlation(n, seed=0):
 
 class TestInput:
 
-    def __init__(self, x, prop, selectable_sups):
+    def __init__(self, x, y, prop, selectable_sups):
         self.x = x
+        self.y = y
         self.prop = prop
         self.selectable_sups = selectable_sups
 
@@ -22,6 +23,7 @@ _CORRELATED_UNCORRELATED_OUTLIER_x = np.array([
 
 CORRELATED_UNCORRELATED_OUTLIER = TestInput(
     _CORRELATED_UNCORRELATED_OUTLIER_x,
+    np.array([-1, 1, 1, -1, 1]),
     full_propositionalization(_CORRELATED_UNCORRELATED_OUTLIER_x),
     [
     [0, 1, 2, 3, 4],
