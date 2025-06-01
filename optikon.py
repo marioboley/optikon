@@ -382,6 +382,97 @@ def equal_width_propositionalization_sorted(x_sorted):
 
 equal_width_propositionalization_sorted.compile("(float64[:, :],)")
 
+##### Lexicographic Tree Search #####
+#####################################
+
+@jitclass
+class LexTreeSearchNode:
+    
+    key: int64[:]
+    critical: int64[:]
+    remaining: int64[:]
+    support: int64[:]
+    pos_support: int64[:]
+
+    def __init__(self, key, critical, remaining, support, pos_support):
+        self.key = key
+        self.critical = critical
+        self.remaining = remaining
+        self.support = support
+        self.pos_support = pos_support
+
+# NODE_TYPE = Node.class_type.instance_type  
+NodeHeap = make_maxheap_class(float64, LexTreeSearchNode.class_type.instance_type)
+
+@njit
+def make_lex_treesearch_root(x, y, prop):
+    l, u = compute_bounds(x)
+    remaining = prop.nontrivial(l, u, np.arange(len(prop)))
+    empty = np.empty(0, dtype=np.int64)
+    support = np.arange(len(x))
+    pos_support = support[y > 0]
+    return LexTreeSearchNode(empty, empty, remaining, support, pos_support)
+
+@njit
+def max_weighted_support(x, y, prop, max_depth=4):
+    heap = NodeHeap()
+
+    root = make_lex_treesearch_root(x, y, prop)
+    root_bound = y[root.pos_support].sum()
+    root_value = y.sum()
+    heap.push(root_bound, root)
+
+    best_key = root.key
+    best_val = root_value
+    nodes_created = 1
+    candidate_edges = 0
+
+    while heap:
+        key, node = heap.pop()
+        
+        if key <= best_val:
+            break
+
+        if len(node.key) >= max_depth:
+            continue
+
+        candidate_edges += len(node.remaining)
+        for p_idx in range(len(node.remaining)):
+            p = node.remaining[p_idx]
+
+            _key = np.empty(len(node.key) + 1, dtype=np.int64)
+            _key[:-1] = node.key
+            _key[-1] = p
+
+            _sup = node.support[prop.support(p, x[node.support])]
+            _pos_sup = node.pos_support[prop.support(p, x[node.pos_support])]
+
+            _val = y[_sup].sum()
+            _bound = y[_pos_sup].sum()
+
+            if _val > best_val:
+                best_val = _val
+                best_key = _key
+
+            if _bound <= best_val:
+                continue
+
+            _crit = np.empty(len(node.critical) + p_idx, dtype=np.int64)
+            _crit[:len(node.critical)] = node.critical
+            _crit[len(node.critical):] = node.remaining[:p_idx]
+
+            l, u = compute_bounds(x[_sup])
+            if len(prop.trivial(l, u, _crit)) > 0:
+                continue
+
+            _rem = prop.nontrivial(l, u, node.remaining[p_idx+1:])
+
+            heap.push(_bound, LexTreeSearchNode(_key, _crit, _rem, _sup, _pos_sup))
+
+            nodes_created += 1
+
+    return best_key, best_val, nodes_created, candidate_edges
+
 
 if __name__=='__main__':
     import doctest

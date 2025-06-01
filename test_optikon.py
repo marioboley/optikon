@@ -1,6 +1,6 @@
 import numpy as np
 import numba as nb
-from optikon import compute_bounds, make_maxheap_class
+from optikon import compute_bounds, make_maxheap_class, max_weighted_support
 
 def test_compute_bounds_nonempty():
     x = np.array([[1., 2.], [0., -1.]])
@@ -49,3 +49,8 @@ def test_float_string_maxheap():
     assert float_string_heap.pop() == (1, 'one')
     assert float_string_heap.pop() == (-1, 'minus one')
     assert not float_string_heap
+
+def test_lex_treesearch():
+    from testdata import SMALL_1
+    key, val, created, candidate_edges = max_weighted_support(SMALL_1.x, SMALL_1.y, SMALL_1.prop)
+    assert val == 3
