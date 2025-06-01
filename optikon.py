@@ -8,6 +8,8 @@ import numpy as np
 from numba import njit
 from numba.experimental import jitclass
 from numba.types import int64, float64
+from numba.typed import List
+import numba.types as numbatypes
 
 ### Utility ###
 ###############
@@ -51,6 +53,62 @@ def compute_bounds(x):
     return l, u
 
 compute_bounds.compile("(float64[:, :],)")
+
+def make_maxheap_class(KeyType, NodeType):
+    """Create a max-heap jitclass specialized for the given KeyType and NodeType.
+    
+    Heaps store data in a list of (key, node) tuples. The heap class is force-compiled before return
+    for transparent performance tests.
+    """
+
+    PairType = numbatypes.Tuple((KeyType, NodeType))
+    heap_spec = [
+        ('data', numbatypes.ListType(PairType))
+    ]
+
+    @jitclass(heap_spec)
+    class Heap:
+        def __init__(self):
+            self.data = List.empty_list(PairType)
+
+        def __bool__(self):
+            return len(self.data) > 0
+
+        def push(self, key, node):
+            self.data.append((key, node))
+            i = len(self.data) - 1
+            while i > 0:
+                parent = (i - 1) // 2
+                if self.data[i][0] <= self.data[parent][0]:
+                    break
+                self.data[i], self.data[parent] = self.data[parent], self.data[i]
+                i = parent
+
+        def pop(self):
+            if len(self.data) == 0:
+                raise IndexError('pop from empty heap')
+            top = self.data[0]
+            last = self.data.pop()
+            if len(self.data) == 0:
+                return top
+            self.data[0] = last
+            i = 0
+            while True:
+                left = 2 * i + 1
+                right = 2 * i + 2
+                largest = i
+                if left < len(self.data) and self.data[left][0] > self.data[largest][0]:
+                    largest = left
+                if right < len(self.data) and self.data[right][0] > self.data[largest][0]:
+                    largest = right
+                if largest == i:
+                    break
+                self.data[i], self.data[largest] = self.data[largest], self.data[i]
+                i = largest
+            return top
+
+    _ = Heap()  # force compile
+    return Heap
 
 ##### Propositionaliation #####
 ###############################
