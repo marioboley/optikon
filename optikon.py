@@ -78,6 +78,15 @@ class Propositionalization:
     def support(self, p, x):
         return np.flatnonzero(self.s[p]*x[:,self.v[p]] >= self.t[p])
     
+    def extended_support(self, q, x):
+        if len(q)==0:
+            return np.arange(len(x))
+        
+        res = np.flatnonzero(self.s[q[0]]*x[:, self.v[q[0]]] >= self.t[q[0]])
+        for i in range(1, len(q)):
+            res = res[np.flatnonzero(self.s[q[i]]*x[res, self.v[q[i]]] >= self.t[q[i]])]
+        return res
+    
     def trivial(prop, l, u, subset):
         """
         Identify trivial (tautological) propositions over the given variable bounds.
