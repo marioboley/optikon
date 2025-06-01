@@ -13,7 +13,7 @@ class TestInput:
         self.prop = prop
         self.selectable_sups = selectable_sups
 
-_CORRELATED_UNCORRELATED_OUTLIER_x = np.array([
+_SMALL_1_x = np.array([
                 [0.0, 1.0, 3.0],
                 [1.0, 2.0, 2.0],
                 [2.0, 3.0, 1.0],
@@ -21,10 +21,10 @@ _CORRELATED_UNCORRELATED_OUTLIER_x = np.array([
                 [4.0, 5.0, 4.0],
             ])
 
-CORRELATED_UNCORRELATED_OUTLIER = TestInput(
-    _CORRELATED_UNCORRELATED_OUTLIER_x,
+SMALL_1 = TestInput(
+    _SMALL_1_x,
     np.array([-1, 1, 1, -1, 1]),
-    full_propositionalization(_CORRELATED_UNCORRELATED_OUTLIER_x),
+    full_propositionalization(_SMALL_1_x),
     [
     [0, 1, 2, 3, 4],
     [0, 1, 2, 3],
