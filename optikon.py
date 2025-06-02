@@ -110,7 +110,7 @@ def make_maxheap_class(KeyType, NodeType):
     _ = Heap()  # force compile
     return Heap
 
-##### Propositionaliation #####
+##### Propositionalisation #####
 ###############################
 
 @jitclass
@@ -133,12 +133,24 @@ class Propositionalization:
         self.t = t
         self.s = s
 
-    def support(self, p, x):
+    def support_specific(self, x, p):
         return np.flatnonzero(self.s[p]*x[:,self.v[p]] >= self.t[p])
     
-    def extended_support(self, q, x):
-        if len(q)==0:
-            return np.arange(len(x))
+    def support_all(self, x, q=None):
+        """Returns indices of samples satisfying all propositions in q.
+
+        If q is None, all propositions are used (i.e. the entire propositionalisation).
+
+        Args:
+            x (ndarray): Input data of shape (n, d).
+            q (ndarray or None): Indices of propositions. If None, uses all.
+
+        Returns:
+            ndarray: 1D array of indices where all selected propositions hold.
+        """
+        if q is None: q = np.arange(len(self))
+
+        if len(q)==0: return np.arange(len(x))
         
         res = np.flatnonzero(self.s[q[0]]*x[:, self.v[q[0]]] >= self.t[q[0]])
         for i in range(1, len(q)):
@@ -230,6 +242,9 @@ class Propositionalization:
         """        
         return self.s*x[:, self.v] >= self.t
     
+    def __getitem__(self, idxs):
+        return Propositionalization(self.v[idxs], self.t[idxs], self.s[idxs])
+
     def __len__(self):
         """
         Returns the number of propositions (p) in this propositionalization.
@@ -414,7 +429,7 @@ def make_lex_treesearch_root(x, y, prop):
     return LexTreeSearchNode(empty, empty, remaining, support, pos_support)
 
 @njit
-def max_weighted_support(x, y, prop, max_depth=4):
+def max_weighted_support(x, y, prop: Propositionalization, max_depth=4):
     heap = NodeHeap()
 
     root = make_lex_treesearch_root(x, y, prop)
@@ -444,8 +459,8 @@ def max_weighted_support(x, y, prop, max_depth=4):
             _key[:-1] = node.key
             _key[-1] = p
 
-            _sup = node.support[prop.support(p, x[node.support])]
-            _pos_sup = node.pos_support[prop.support(p, x[node.pos_support])]
+            _sup = node.support[prop.support_specific(x[node.support], p)]
+            _pos_sup = node.pos_support[prop.support_specific(x[node.pos_support], p)]
 
             _val = y[_sup].sum()
             _bound = y[_pos_sup].sum()
