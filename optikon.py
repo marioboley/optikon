@@ -10,6 +10,7 @@ from numba.experimental import jitclass
 from numba.types import int64, float64
 from numba.typed import List
 import numba.types as numbatypes
+# from numba.types import unicode_type
 
 ### Utility ###
 ###############
@@ -262,32 +263,69 @@ class Propositionalization:
 # def str_from_prop(prop, j):
 #     return f'x{prop.v[j]+1} {'>=' if prop.s[j]==1 else '<='} {prop.s[j]*prop.t[j]:0.3f}'
 
-    # @njit
-    def str_from_prop(prop, j):
-        """
-        Numba-compatible string construction for proposition j with manual float formatting.
-        Output format: "x{v+1} >= int.frac" or "x{v+1} <= int.frac"
-        """
-        v_idx = prop.v[j] + 1
-        sign = '>=' if prop.s[j] == 1 else '<='
-        value = prop.s[j] * prop.t[j]
 
-        int_part = int(value)
-        frac_part = int((abs(value) - abs(int_part)) * 1000 + 0.5)
-
-        int_str = str(int_part)
-        frac_str = str(frac_part).rjust(3, '0')
-
-        return 'x' + str(v_idx) + ' ' + sign + ' ' + int_str + '.' + frac_str
-
-    # @njit
+        # @njit
     def str_from_conj(prop, q):
+        # print('Deprecated method "str_from_conj" will be removed in version 0.3; use "prop[q].as_conj_str()" instead', flush=True)
         result = ''
         for i in range(len(q)):
             if i > 0:
                 result += ' & '
             result += prop.str_from_prop(q[i])
         return result
+
+    def str_from_prop(self, j, dec=3):
+        """
+        Returns a string representation of the j-th proposition with basic float formatting
+        using fixed number of decimal digit.
+
+        Args:
+            j (int): Index of the proposition.
+            dec (int): Number of decimal digits to show. Must be >= 0.
+
+        Returns:
+            str: Formatted string of the proposition in format: "x{v+1} >= int.frac" or "x{v+1} <= int.frac".
+
+        Note:
+            Negative values for `dec` are currently not supported. The whole method is a workaround to deal
+            with current numba limitations.
+        """
+        v_idx = self.v[j] + 1
+        sign = '>=' if self.s[j] == 1 else '<='
+        value = self.s[j] * self.t[j]
+
+        scale = 10 ** dec
+        rounded = int(value * scale + 0.5 * (1 if value >= 0 else -1)) / scale
+
+        if dec <= 0:
+            val_str = str(int(rounded))
+        else:
+            int_part = int(rounded)
+            frac_part = int(abs(rounded - int_part) * (10 ** dec) + 0.5)
+            int_str = str(int_part)
+            frac_str = str(frac_part).rjust(dec, '0')
+            val_str = int_str + '.' + frac_str
+
+        return 'x' + str(v_idx) + ' ' + sign + ' ' + val_str
+    
+    def as_str(self, start='[', end=']', sep=', ', dec=3):
+        parts = List.empty_list(numbatypes.unicode_type)
+        parts.append(start)
+        for i in range(len(self)):
+            if i > 0:
+                parts.append(sep)
+            parts.append(self.str_from_prop(i, dec))
+        parts.append(end)
+        return ''.join(parts)
+    
+    def as_conj_str(self, dec=3):
+        return self.as_str('', '', ' & ', dec)
+    
+    def as_disj_str(self, dec=3):
+        return self.as_str('', '', ' | ', dec)
+
+    def __str__(self):
+        return self.as_str()
 
 def full_propositionalization(x):
     """
