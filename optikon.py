@@ -158,7 +158,7 @@ class Propositionalization:
             res = res[np.flatnonzero(self.s[q[i]]*x[res, self.v[q[i]]] >= self.t[q[i]])]
         return res
     
-    def trivial(prop, l, u, subset):
+    def trivial(self, l, u, subset):
         """
         Identify trivial (tautological) propositions over the given variable bounds.
 
@@ -180,9 +180,9 @@ class Propositionalization:
             >>> prop.tautologies(l, u, np.array([0, 1]))
             array([1])
         """
-        v = prop.v[subset]
-        t = prop.t[subset]
-        s = prop.s[subset]
+        v = self.v[subset]
+        t = self.t[subset]
+        s = self.s[subset]
 
         res = np.zeros(len(subset), dtype=np.bool_)
 
@@ -194,7 +194,7 @@ class Propositionalization:
 
         return subset[res] #return np.flatnonzero(res)
 
-    def nontrivial(prop, l, u, subset):
+    def nontrivial(self, l, u, subset):
         """
         Identify propositions that are not tautological over the given variable bounds.
 
@@ -216,9 +216,9 @@ class Propositionalization:
             >>> nontrivial(prop, l, u, np.array([0, 1]))
             array([0])
         """
-        v = prop.v[subset]
-        t = prop.t[subset]
-        s = prop.s[subset]
+        v = self.v[subset]
+        t = self.t[subset]
+        s = self.s[subset]
 
         res = np.zeros(len(subset), dtype=np.bool_)
 
@@ -259,19 +259,17 @@ class Propositionalization:
         """
         return len(self.v)
 
-# @njit
-# def str_from_prop(prop, j):
-#     return f'x{prop.v[j]+1} {'>=' if prop.s[j]==1 else '<='} {prop.s[j]*prop.t[j]:0.3f}'
+    # not njit compatible but useful as template for external function
+    # def str_from_prop(prop, j):
+    #     return f'x{prop.v[j]+1} {'>=' if prop.s[j]==1 else '<='} {prop.s[j]*prop.t[j]:0.3f}'
 
-
-        # @njit
-    def str_from_conj(prop, q):
+    def str_from_conj(self, q):
         # print('Deprecated method "str_from_conj" will be removed in version 0.3; use "prop[q].as_conj_str()" instead', flush=True)
         result = ''
         for i in range(len(q)):
             if i > 0:
                 result += ' & '
-            result += prop.str_from_prop(q[i])
+            result += self.str_from_prop(q[i])
         return result
 
     def str_from_prop(self, j, dec=3):
