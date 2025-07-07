@@ -16,6 +16,22 @@ import numba.types as numbatypes
 ###############
 
 @njit
+def argsort_columns(x):
+    n, p = x.shape
+    out = np.empty((n, p), dtype=np.int64)
+    for j in range(p):
+        out[:, j] = np.argsort(x[:, j])
+    return out
+
+@njit
+def sort_columns(x):
+    _, p = x.shape
+    out = np.empty_like(x)
+    for j in range(p):
+        out[:, j] = np.sort(x[:, j])
+    return out
+
+@njit
 def compute_bounds(x):
     """
     Compute per-variable bounds over a dataset.
@@ -53,6 +69,8 @@ def compute_bounds(x):
                 u[j] = x[i, j]
     return l, u
 
+sort_columns.compile("(float64[:, :],)")
+argsort_columns.compile("(float64[:, :],)")
 compute_bounds.compile("(float64[:, :],)")
 
 def make_maxheap_class(KeyType, NodeType):
@@ -329,7 +347,7 @@ class Propositionalization:
 def full_propositionalization(x):
     """
     Constructs propositionalization with all non-trivial threshold propositions from x in
-    lexicographic order by (v, t, s).
+    lexicographic order by (v, -s, -t).
     """
     n, d = x.shape
     max_props = 2 * n * d
@@ -372,8 +390,36 @@ def equal_frequency_propositionalization(x, k=None):
     s = np.repeat([1, -1], len(v))
     return Propositionalization(np.concatenate((v, v)), np.concatenate((t, -t)), s)
 
+@njit
 def equal_width_propositionalization(x):
-    return equal_width_propositionalization_sorted(np.sort(x, axis=0))
+    """
+    Generate propositionalizaton using equal-width binning (according to the Freedman-Diaconis rule
+    as also implemented in numpy.histogram_bin_edges(data, bins='fd')).
+
+    Specifically, for each column in the input, this function determines a bin width using the rule:
+
+        width = 2 * IQR / n**(1/3)
+
+    where IQR is the interquartile range of the column (75th percentile - 25th percentile) and then
+    provides upper and lower bound proposition for each threshold that separates two bins.
+
+    Args:
+        x (ndarray): An (n, d) array 
+
+    Returns:
+        Propositionalization with variable indices, signs, and threshold pointers v, s, and t
+        ordered lexicographically with respect to (v, -s, -t) implying logically stronger
+        propositions to have a smaller index than logically weaker propositions on the same
+        variabe 
+            
+    Example:
+        >>> import numpy as np
+        >>> x = np.linspace(0, 12, 27).reshape(-1, 1)
+        >>> result = equal_width_propositionalization(x)
+        >>> len(result) # n**(1/3)=3, ICR=6 results in 12/4 = 3 bins, hence 2 non-trivial thresholds per direction
+        4
+    """
+    return equal_width_propositionalization_sorted(sort_columns(x))
 
 @njit
 def equal_width_propositionalization_sorted(x_sorted):
@@ -392,7 +438,6 @@ def equal_width_propositionalization_sorted(x_sorted):
 
         if u_j == l_j:
             continue
-
         q25 = col_data[int(0.25 * (n-1))]
         q75 = col_data[int(0.75 * (n-1))]
         iqr = q75 - q25
@@ -432,8 +477,9 @@ def equal_width_propositionalization_sorted(x_sorted):
 
     return Propositionalization(v[:idx], t[:idx], s[:idx])
 
-full_propositionalization.compile("(float64[:, :],)")
-equal_width_propositionalization_sorted.compile("(float64[:, :],)")
+full_propositionalization.compile('(float64[:, :],)')
+equal_width_propositionalization.compile('(float64[:, :],)')
+equal_width_propositionalization_sorted.compile('(float64[:, :],)')
 
 ##### Lexicographic Tree Search #####
 #####################################

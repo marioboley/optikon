@@ -1,6 +1,11 @@
 import numpy as np
 import numba as nb
-from optikon import compute_bounds, make_maxheap_class, max_weighted_support, Propositionalization, full_propositionalization
+from optikon import sort_columns, compute_bounds, make_maxheap_class, max_weighted_support, Propositionalization, full_propositionalization, equal_width_propositionalization
+
+def test_sort_columns():
+    x = np.array([[1.0, 4.0], [-1.0, 5.0], [0.0, 4.5]])
+    x = sort_columns(x)
+    assert np.array_equal(x, np.array([[-1.0, 4.0], [-0.0, 4.5], [1.0, 5.0]]))
 
 def test_compute_bounds_nonempty():
     x = np.array([[1., 2.], [0., -1.]])
@@ -56,6 +61,11 @@ def test_fullprop():
     assert len(prop) == 8
     assert np.array_equal(prop.v, np.array([0, 0, 0, 0, 1, 1, 1, 1]))
     assert np.array_equal(prop.s*prop.t, np.array([1.0, 0.0, -1.0, 0.0, 5.0, 4.5, 4.0, 4.5]))
+
+def test_equal_width_prop():
+    x = np.linspace(0, 12, 27).reshape(-1, 1)
+    prop = equal_width_propositionalization(x)
+    assert len(prop) == 4
 
 def test_propositionalisation_fancy_indexing():
     v = np.array([0, 1, 2, 3], dtype=np.int64)
