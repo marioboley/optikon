@@ -1,6 +1,6 @@
 import numpy as np
 import numba as nb
-from optikon import compute_bounds, make_maxheap_class, max_weighted_support, Propositionalization
+from optikon import compute_bounds, make_maxheap_class, max_weighted_support, Propositionalization, full_propositionalization
 
 def test_compute_bounds_nonempty():
     x = np.array([[1., 2.], [0., -1.]])
@@ -50,6 +50,13 @@ def test_float_string_maxheap():
     assert float_string_heap.pop() == (-1, 'minus one')
     assert not float_string_heap
 
+def test_fullprop():
+    x = np.array([[1.0, 4.0], [-1.0, 5.0], [0.0, 4.5]])
+    prop = full_propositionalization(x)
+    assert len(prop) == 8
+    assert np.array_equal(prop.v, np.array([0, 0, 0, 0, 1, 1, 1, 1]))
+    assert np.array_equal(prop.s*prop.t, np.array([1.0, 0.0, -1.0, 0.0, 5.0, 4.5, 4.0, 4.5]))
+
 def test_propositionalisation_fancy_indexing():
     v = np.array([0, 1, 2, 3], dtype=np.int64)
     t = np.array([0.1, 0.2, 0.3, 0.4], dtype=np.float64)
@@ -65,7 +72,7 @@ def test_propositionalisation_fancy_indexing():
 
 def test_lex_treesearch():
     from testdata import SMALL_1
-    key, val, created, candidate_edges = max_weighted_support(SMALL_1.x, SMALL_1.y, SMALL_1.prop)
+    key, val, stats = max_weighted_support(SMALL_1.x, SMALL_1.y, SMALL_1.prop)
     assert val == 3
 
 def test_str_methods():

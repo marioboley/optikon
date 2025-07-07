@@ -325,6 +325,7 @@ class Propositionalization:
     def __str__(self):
         return self.as_str()
 
+@njit
 def full_propositionalization(x):
     """
     Constructs propositionalization with all non-trivial threshold propositions from x in
@@ -431,6 +432,7 @@ def equal_width_propositionalization_sorted(x_sorted):
 
     return Propositionalization(v[:idx], t[:idx], s[:idx])
 
+full_propositionalization.compile("(float64[:, :],)")
 equal_width_propositionalization_sorted.compile("(float64[:, :],)")
 
 ##### Lexicographic Tree Search #####
@@ -522,8 +524,8 @@ def max_weighted_support(x, y, prop: Propositionalization, max_depth=4):
 
             nodes_created += 1
 
-    return best_key, best_val, nodes_created, candidate_edges
-
+    return prop[best_key], best_val, (nodes_created, candidate_edges)
+    
 
 if __name__=='__main__':
     import doctest
