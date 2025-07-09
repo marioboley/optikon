@@ -346,8 +346,16 @@ class Propositionalization:
 @njit
 def full_propositionalization(x):
     """
-    Constructs propositionalization with all non-trivial threshold propositions from x in
-    lexicographic order by (v, -s, -t).
+    Constructs propositionalization with all non-trivial threshold propositions from x.
+     
+    Args:
+        x (ndarray): An (n, d) array 
+
+    Returns:
+        Propositionalization with variable indices, signs, and threshold pointers v, s, and t
+        ordered lexicographically with respect to (v, -s, -t) implying logically stronger
+        propositions to have a smaller index than logically weaker propositions on the same
+        variabe
     """
     n, d = x.shape
     max_props = 2 * n * d
@@ -513,9 +521,10 @@ def make_lex_treesearch_root(x, y, prop):
     return LexTreeSearchNode(empty, empty, remaining, support, pos_support)
 
 @njit
-def max_weighted_support(x, y, prop: Propositionalization, max_depth=4):
+def max_weighted_support(x, y, prop_fac=equal_width_propositionalization, max_depth=4):
     heap = NodeHeap()
 
+    prop = prop_fac(x)
     root = make_lex_treesearch_root(x, y, prop)
     root_bound = y[root.pos_support].sum()
     root_value = y.sum()
@@ -572,6 +581,78 @@ def max_weighted_support(x, y, prop: Propositionalization, max_depth=4):
 
     return prop[best_key], best_val, (nodes_created, candidate_edges)
     
+@njit
+def max_weighted_support_greedy(x, y, max_depth=5):
+    n, p = x.shape
+    orders = argsort_columns(x)
+    support = np.ones(n, dtype=np.bool)
+    support_count = n
+    cum_support_count = 0
+
+    v = np.zeros(max_depth, dtype=np.int64)
+    s = np.zeros(max_depth, dtype=np.int64)
+    t = np.zeros(max_depth, dtype=np.float64)
+
+    current = np.zeros(p, dtype=np.int64) # cursor buffer for order updates
+    
+    best_sum = np.sum(y)
+    num_cond = 0
+
+    for k in range(1, max_depth+1):
+        cum_support_count += support_count
+        sum_y = np.sum(y[orders[:support_count, 0]])
+        best_j, best_i, best_s = -1, -1, 1
+        improvement = False
+        for j in range(p):
+            sum_left, sum_right = 0, sum_y
+            for i in range(support_count - 1): 
+                # test splits between x^j_i (last left) and x^j_i+1 (first right)
+                y_i = y[orders[i, j]]
+                sum_left += y_i
+                sum_right -= y_i
+                if x[orders[i, j], j]==x[orders[i+1, j], j]:
+                    continue
+
+                if sum_left > best_sum:
+                    best_i = i
+                    best_j = j
+                    best_s = -1
+                    best_sum = sum_left
+                    improvement = True
+                elif sum_right > best_sum:
+                    best_i = i
+                    best_j = j
+                    best_s = 1
+                    best_sum = sum_right
+                    improvement = True
+
+        if not improvement:
+            break
+
+        v[k-1] = best_j
+        s[k-1] = best_s
+        t[k-1] = (x[orders[best_i, best_j], best_j] + x[orders[best_i + 1, best_j], best_j]) / 2
+        num_cond = k
+
+        if best_s == 1: # lower bound
+            support[orders[:best_i+1, best_j]] = False
+        else: # upper bound
+            support[orders[best_i+1:, best_j]] = False
+
+        current[:] = 0
+        for i in range(support_count): # need old support count here
+            for j in range(p): # can this loop be vectorised?
+                if support[orders[i, j]]:
+                    orders[current[j], j] = orders[i, j]
+                    current[j] += 1
+
+        if best_s == 1: # lower bound
+            support_count = support_count - best_i - 1
+        else: # upper bound
+            support_count = best_i + 1
+    res = Propositionalization(v[:num_cond], t[:num_cond], s[:num_cond])
+    return res, best_sum, {'cum_support_count': cum_support_count}
+
 
 if __name__=='__main__':
     import doctest
