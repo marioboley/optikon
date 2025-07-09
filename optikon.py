@@ -521,7 +521,7 @@ def make_lex_treesearch_root(x, y, prop):
     return LexTreeSearchNode(empty, empty, remaining, support, pos_support)
 
 @njit
-def max_weighted_support(x, y, prop_fac=equal_width_propositionalization, max_depth=4):
+def max_weighted_support_bb(x, y, prop_fac=equal_width_propositionalization, max_depth=4):
     heap = NodeHeap()
 
     prop = prop_fac(x)
@@ -579,7 +579,8 @@ def max_weighted_support(x, y, prop_fac=equal_width_propositionalization, max_de
 
             nodes_created += 1
 
-    return prop[best_key], best_val, (nodes_created, candidate_edges)
+    return prop[best_key], best_val, {'nodes_created': nodes_created,
+                                      'candidate_edges': candidate_edges}
     
 @njit
 def max_weighted_support_greedy(x, y, max_depth=5):

@@ -1,6 +1,6 @@
 import numpy as np
 import numba as nb
-from optikon import sort_columns, compute_bounds, make_maxheap_class, max_weighted_support, max_weighted_support_greedy, Propositionalization, full_propositionalization, equal_width_propositionalization
+from optikon import sort_columns, compute_bounds, make_maxheap_class, max_weighted_support_bb, max_weighted_support_greedy, Propositionalization, full_propositionalization, equal_width_propositionalization
 from testdata import SMALL_1
 
 def test_sort_columns():
@@ -83,7 +83,7 @@ def test_propositionalisation_fancy_indexing():
 
 def test_lex_treesearch():
     from testdata import SMALL_1
-    key, val, stats = max_weighted_support(SMALL_1.x, SMALL_1.y, SMALL_1.prop_fac)
+    key, val, stats = max_weighted_support_bb(SMALL_1.x, SMALL_1.y, SMALL_1.prop_fac)
     assert val == 3
 
 def test_greedy_max_weighted_support():
