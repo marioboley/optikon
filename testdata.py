@@ -7,10 +7,10 @@ def mvn_with_correlation(n, seed=0):
 
 class TestInput:
 
-    def __init__(self, x, y, prop, selectable_sups):
+    def __init__(self, x, y, prop_fac, selectable_sups):
         self.x = x
         self.y = y
-        self.prop = prop
+        self.prop_fac = prop_fac
         self.selectable_sups = selectable_sups
 
 _SMALL_1_x = np.array([
@@ -24,7 +24,7 @@ _SMALL_1_x = np.array([
 SMALL_1 = TestInput(
     _SMALL_1_x,
     np.array([-1, 1, 1, -1, 1]),
-    full_propositionalization(_SMALL_1_x),
+    full_propositionalization,
     [
     [0, 1, 2, 3, 4],
     [0, 1, 2, 3],
