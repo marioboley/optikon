@@ -83,7 +83,7 @@ def test_propositionalisation_fancy_indexing():
 
 def test_lex_treesearch():
     from testdata import SMALL_1
-    key, val, stats = max_weighted_support_bb(SMALL_1.x, SMALL_1.y, SMALL_1.prop_fac)
+    key, val, stats = max_weighted_support_bb(SMALL_1.x, SMALL_1.y, SMALL_1.prop_fac(SMALL_1.x))
     assert val == 3
 
 def test_greedy_max_weighted_support():

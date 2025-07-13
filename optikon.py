@@ -306,8 +306,8 @@ class Propositionalization:
             Negative values for `dec` are currently not supported. The whole method is a workaround to deal
             with current numba limitations.
         """
-        v_idx = self.v[j] + 1
-        sign = '>=' if self.s[j] == 1 else '<='
+        name_str = 'x' + str(self.v[j] + 1)
+        rel_str = '>=' if self.s[j] == 1 else '<='
         value = self.s[j] * self.t[j]
 
         scale = 10 ** dec
@@ -322,7 +322,7 @@ class Propositionalization:
             frac_str = str(frac_part).rjust(dec, '0')
             val_str = int_str + '.' + frac_str
 
-        return 'x' + str(v_idx) + ' ' + sign + ' ' + val_str
+        return name_str + ' ' + rel_str + ' ' + val_str
     
     def as_str(self, start='[', end=']', sep=', ', dec=3):
         parts = List.empty_list(numbatypes.unicode_type)
@@ -521,10 +521,9 @@ def make_lex_treesearch_root(x, y, prop):
     return LexTreeSearchNode(empty, empty, remaining, support, pos_support)
 
 @njit
-def max_weighted_support_bb(x, y, prop_fac=equal_width_propositionalization, max_depth=4):
+def max_weighted_support_bb(x, y, prop, max_depth=4):
     heap = NodeHeap()
 
-    prop = prop_fac(x)
     root = make_lex_treesearch_root(x, y, prop)
     root_bound = y[root.pos_support].sum()
     root_value = y.sum()
@@ -588,7 +587,9 @@ def max_weighted_support_greedy(x, y, max_depth=5):
     orders = argsort_columns(x)
     support = np.ones(n, dtype=np.bool)
     support_count = n
+
     cum_support_count = 0
+    non_separable = 0
 
     v = np.zeros(max_depth, dtype=np.int64)
     s = np.zeros(max_depth, dtype=np.int64)
@@ -612,6 +613,7 @@ def max_weighted_support_greedy(x, y, max_depth=5):
                 sum_left += y_i
                 sum_right -= y_i
                 if x[orders[i, j], j]==x[orders[i+1, j], j]:
+                    non_separable += 1
                     continue
 
                 if sum_left > best_sum:
@@ -651,8 +653,10 @@ def max_weighted_support_greedy(x, y, max_depth=5):
             support_count = support_count - best_i - 1
         else: # upper bound
             support_count = best_i + 1
+            
     res = Propositionalization(v[:num_cond], t[:num_cond], s[:num_cond])
-    return res, best_sum, {'cum_support_count': cum_support_count}
+    return res, best_sum, {'cum_support_count': cum_support_count,
+                           'non_separable': non_separable}
 
 
 if __name__=='__main__':
