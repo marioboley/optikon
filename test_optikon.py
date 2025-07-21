@@ -96,15 +96,16 @@ def test_greedy_max_weighted_support(case):
 
 def test_str_methods():
     # Construct with v=[0,1], s=[1,-1], t=[0.25, 1.5]
-    v = np.array([0, 1], dtype=np.int64)
-    s = np.array([1, -1], dtype=np.int64)
-    t = np.array([0.25, 11.5], dtype=np.float64)
+    v = np.array([0, 1, 0], dtype=np.int64)
+    s = np.array([1, -1, -1], dtype=np.int64)
+    t = np.array([0.25, 11.5, -0.5], dtype=np.float64)
     prop = Propositionalization(v, t, s)
 
     # Test str_from_prop
     assert prop.str_from_prop(0, 2) == 'x1 >= 0.25'
     assert prop.str_from_prop(1, 1) == 'x2 <= -11.5'
     assert prop.str_from_prop(1, 2) == 'x2 <= -11.50'
+    assert prop.str_from_prop(2, 2) == 'x1 <= -0.50'
 
     # Test as_str
     assert prop.as_str('[', ']', ', ', 2) == '[x1 >= 0.25, x2 <= -11.50]'
