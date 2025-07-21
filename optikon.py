@@ -634,7 +634,7 @@ def max_weighted_support_greedy(x, y, max_depth=5):
 
         v[k-1] = best_j
         s[k-1] = best_s
-        t[k-1] = (x[orders[best_i, best_j], best_j] + x[orders[best_i + 1, best_j], best_j]) / 2
+        t[k-1] = best_s*(x[orders[best_i, best_j], best_j] + x[orders[best_i + 1, best_j], best_j]) / 2
         num_cond = k
 
         if best_s == 1: # lower bound
@@ -653,7 +653,7 @@ def max_weighted_support_greedy(x, y, max_depth=5):
             support_count = support_count - best_i - 1
         else: # upper bound
             support_count = best_i + 1
-            
+
     res = Propositionalization(v[:num_cond], t[:num_cond], s[:num_cond])
     return res, best_sum, {'cum_support_count': cum_support_count,
                            'non_separable': non_separable}
