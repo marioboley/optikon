@@ -95,26 +95,27 @@ def test_greedy_max_weighted_support(case):
     np.testing.assert_array_equal(res.support_all(case.x), case.opt_weighted_support_set)
 
 def test_str_methods():
-    # Construct with v=[0,1], s=[1,-1], t=[0.25, 1.5]
-    v = np.array([0, 1, 0], dtype=np.int64)
-    s = np.array([1, -1, -1], dtype=np.int64)
-    t = np.array([0.25, 11.5, -0.5], dtype=np.float64)
+    v = np.array([0, 0, 1, 2, 2], dtype=np.int64)
+    s = np.array([1, -1, -1, 1, -1], dtype=np.int64)
+    t = np.array([-0.25, -0.5, 11.5, -2.115, 0.2], dtype=np.float64)
     prop = Propositionalization(v, t, s)
 
     # Test str_from_prop
-    assert prop.str_from_prop(0, 2) == 'x1 >= 0.25'
-    assert prop.str_from_prop(1, 1) == 'x2 <= -11.5'
-    assert prop.str_from_prop(1, 2) == 'x2 <= -11.50'
-    assert prop.str_from_prop(2, 2) == 'x1 <= -0.50'
+    assert prop.str_from_prop(0, 2) == 'x1 >= -0.25'
+    assert prop.str_from_prop(1, 2) == 'x1 <= 0.50'
+    assert prop.str_from_prop(2, 1) == 'x2 <= -11.5'
+    assert prop.str_from_prop(2, 2) == 'x2 <= -11.50'
+    assert prop.str_from_prop(3, 2) == 'x3 >= -2.12'
+    assert prop.str_from_prop(4, 2) == 'x3 <= -0.20'
 
     # Test as_str
-    assert prop.as_str('[', ']', ', ', 2) == '[x1 >= 0.25, x2 <= -11.50]'
+    assert prop.as_str('[', ']', ', ', 2) == '[x1 >= -0.25, x1 <= 0.50, x2 <= -11.50, x3 >= -2.12, x3 <= -0.20]'
 
     # Test as_conj_str
-    assert prop.as_conj_str(3) == 'x1 >= 0.250 & x2 <= -11.500'
+    assert prop.as_conj_str(3) == 'x1 >= -0.250 & x1 <= 0.500 & x2 <= -11.500 & x3 >= -2.115 & x3 <= -0.200'
 
     # Test as_disj_str
-    assert prop.as_disj_str(0) == 'x1 >= 0 | x2 <= -12'
+    assert prop.as_disj_str(0) == 'x1 >= 0 | x1 <= 1 | x2 <= -12 | x3 >= -2 | x3 <= 0'
 
     # Test __str__
-    assert str(prop) == '[x1 >= 0.250, x2 <= -11.500]'
+    assert str(prop) == '[x1 >= -0.250, x1 <= 0.500, x2 <= -11.500, x3 >= -2.115, x3 <= -0.200]'

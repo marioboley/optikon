@@ -318,9 +318,11 @@ class Propositionalization:
         else:
             int_part = int(rounded)
             frac_part = int(abs(rounded - int_part) * (10 ** dec) + 0.5)
-            int_str = str(int_part)
+            pos_int_part = abs(int_part)
+            sign_str = '' if value >= 0 else '-'
+            int_str = str(pos_int_part)
             frac_str = str(frac_part).rjust(dec, '0')
-            val_str = int_str + '.' + frac_str
+            val_str = sign_str + int_str + '.' + frac_str
 
         return name_str + ' ' + rel_str + ' ' + val_str
     
