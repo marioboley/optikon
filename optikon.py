@@ -487,6 +487,11 @@ def equal_width_propositionalization_sorted(x_sorted):
 
     return Propositionalization(v[:idx], t[:idx], s[:idx])
 
+@njit
+def empty_propositionalization(x=None):
+    return Propositionalization(np.empty(0, dtype=np.int64), np.empty(0, dtype=np.float64), np.empty(0, dtype=np.int64))
+
+empty_propositionalization.compile('(float64[:, :],)')
 full_propositionalization.compile('(float64[:, :],)')
 equal_width_propositionalization.compile('(float64[:, :],)')
 equal_width_propositionalization_sorted.compile('(float64[:, :],)')

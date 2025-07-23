@@ -1,7 +1,7 @@
 import numpy as np
 import numba as nb
 import pytest
-from optikon import sort_columns, compute_bounds, make_maxheap_class, max_weighted_support_bb, max_weighted_support_greedy, Propositionalization, full_propositionalization, equal_width_propositionalization
+from optikon import sort_columns, compute_bounds, make_maxheap_class, max_weighted_support_bb, max_weighted_support_greedy, Propositionalization, full_propositionalization, equal_width_propositionalization, empty_propositionalization
 from testdata import SMALL_1, TINY_1
 
 def test_sort_columns():
@@ -56,6 +56,11 @@ def test_float_string_maxheap():
     assert float_string_heap.pop() == (1, 'one')
     assert float_string_heap.pop() == (-1, 'minus one')
     assert not float_string_heap
+
+def test_emptyprop():
+    x = np.array([[1.0, 4.0], [-1.0, 5.0], [0.0, 4.5]])
+    prop = empty_propositionalization()
+    assert len(prop.support_all(x)) == 3
 
 def test_fullprop():
     x = np.array([[1.0, 4.0], [-1.0, 5.0], [0.0, 4.5]])

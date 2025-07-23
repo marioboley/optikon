@@ -1,6 +1,6 @@
 [project]
 name = "optikon"
-version = "0.2.1"
+version = "0.2.3"
 description = "Optimisation of propositional conjunctions about numerical data"
 authors = [{ name = "Mario Boley", email = "mario.boley@gmail.com" }]
 readme = "README.md"
