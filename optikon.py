@@ -588,6 +588,9 @@ def max_weighted_support_bb(x, y, prop, max_depth=4):
     return prop[best_key], best_val, {'nodes_created': nodes_created,
                                       'candidate_edges': candidate_edges}
     
+##### Greedy Search #####
+#########################
+
 @njit
 def max_weighted_support_greedy(x, y, max_depth=5):
     n, p = x.shape
