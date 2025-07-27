@@ -1,9 +1,42 @@
 import numpy as np
 from optikon import full_propositionalization
 
-def mvn_with_correlation(n, seed=0):
+def diblock_mvn_sample(n, k=2, rho_within=0.5, rho_between=-0.5, seed=0):
+    """
+    Generate multivariate normal samples with a 2-block correlation structure.
+
+    The 2k-covariance matrix has:
+    - `rho_within` correlation within each of the two size-k blocks,
+    - `rho_between` correlation between variables from different blocks,
+    - unit variance on the diagonal.
+
+    Args:
+        n (int): Number of samples to generate.
+        k (int): Size of each positively correlated block. Total dimension is 2k.
+        rho_within (float): Correlation coefficient within each block.
+        rho_between (float): Correlation coefficient between blocks.
+        seed (int): Random seed for reproducibility.
+
+    Returns:
+        np.ndarray: An (n, 2k) array of samples from the specified multivariate normal distribution.
+
+    Example:
+        >>> x = mvn_with_correlation(5, k=2, seed=42)
+        >>> x.shape
+        (5, 4)
+    """
     rng = np.random.default_rng(seed=seed)
-    return rng.multivariate_normal([0, 0, 0, 0], [[1, 0.5, -0.5, -0.5],[0.5, 1, -0.5, -0.5], [-0.5, -0.5, 1, 0.5], [-0.5, -0.5, 0.5, 1]], size=n)
+    size = 2 * k
+
+    cov = np.full((size, size), rho_between)
+
+    block1 = slice(0, k)
+    block2 = slice(k, 2 * k)
+    cov[block1, block1] = rho_within
+    cov[block2, block2] = rho_within
+    np.fill_diagonal(cov, 1.0)
+
+    return rng.multivariate_normal(np.zeros(size), cov, size=n)
 
 class TestInput:
 
