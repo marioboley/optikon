@@ -616,6 +616,57 @@ class WeightedSupport:
         self.value_removed += yi
         self.value_remaining -= yi
 
+@jitclass
+class NormalisedWeightedSupport:
+
+    w: float64[:]
+    u: float64[:]
+    power: float64
+    lam: float64
+    
+    sum_w_all: float64
+    sum_w_removed: float64
+    sum_w_remaining: float64
+    
+    sum_u_all: int64
+    sum_u_removed: int64
+    sum_u_remaining: int64
+
+    value: float64
+    value_removed: float64
+    value_remaining: float64
+
+    def __init__(self, w, u=None, norm=2, lam=0):
+        self.w = w.astype('float64')
+        self.u = u.astype('float64') if u is not None else np.ones(len(w))
+        self.power = 1/norm
+        self.lam = lam
+        self.support(np.arange(len(w)))
+        self.reset()
+
+    def support(self, support):
+        self.sum_w_all = np.sum(self.w[support])
+        self.sum_u_all = np.sum(self.u[support])
+        self.value = self.sum_w_all / (self.sum_u_all**self.power + self.lam)
+
+    def reset(self):
+        self.sum_w_removed = 0
+        self.sum_w_remaining = self.sum_w_all
+        self.sum_u_removed = 0
+        self.sum_u_remaining = self.sum_u_all
+        self.value_removed = 0
+        self.value_remaining = self.sum_w_remaining / (self.sum_u_remaining**self.power + self.lam)
+
+    def remove(self, i):
+        wi = self.w[i]
+        ui = self.u[i]
+        self.sum_w_removed += wi
+        self.sum_w_remaining -= wi
+        self.sum_u_removed += ui
+        self.sum_u_remaining -= ui
+        self.value_removed = self.sum_w_removed / (self.sum_u_removed**self.power + self.lam)
+        self.value_remaining = self.sum_w_remaining / (self.sum_u_remaining**self.power + self.lam)
+
 @njit
 def greedy_maximization(x, obj, max_depth=5):
     n, p = x.shape
