@@ -1,7 +1,7 @@
 import numpy as np
 import numba as nb
 import pytest
-from optikon import sort_columns, compute_bounds, make_maxheap_class, max_weighted_support_bb, max_weighted_support_greedy, Propositionalization, full_propositionalization, equal_width_propositionalization, empty_propositionalization
+from optikon import sort_columns, compute_bounds, make_maxheap_class, max_weighted_support_bb, greedy_maximization, Propositionalization, full_propositionalization, equal_width_propositionalization, empty_propositionalization, WeightedSupport
 from testdata import SMALL_1, TINY_1
 
 def test_sort_columns():
@@ -95,7 +95,7 @@ def test_lex_treesearch(case):
 
 @pytest.mark.parametrize('case', [TINY_1, SMALL_1])
 def test_greedy_max_weighted_support(case):
-    res, val, _ = max_weighted_support_greedy(case.x, case.y)
+    res, val, _ = greedy_maximization(case.x, WeightedSupport(case.y))
     assert val == case.opt_weighted_support
     np.testing.assert_array_equal(res.support_all(case.x), case.opt_weighted_support_set)
 

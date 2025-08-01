@@ -591,8 +591,33 @@ def max_weighted_support_bb(x, y, prop, max_depth=4):
 ##### Greedy Search #####
 #########################
 
+@jitclass
+class WeightedSupport:
+
+    w: float64[:]
+    value: float64
+    value_removed: float64
+    value_remaining: float64
+
+    def __init__(self, w):
+        self.w = w.astype('float64')
+        self.support(np.arange(len(w)))
+        self.reset()
+
+    def support(self, support):
+        self.value = np.sum(self.w[support])
+
+    def reset(self):
+        self.value_removed = 0
+        self.value_remaining = self.value
+
+    def remove(self, i):
+        yi = self.w[i]
+        self.value_removed += yi
+        self.value_remaining -= yi
+
 @njit
-def max_weighted_support_greedy(x, y, max_depth=5):
+def greedy_maximization(x, obj, max_depth=5):
     n, p = x.shape
     orders = argsort_columns(x)
     support = np.ones(n, dtype=np.bool)
@@ -607,36 +632,40 @@ def max_weighted_support_greedy(x, y, max_depth=5):
 
     current = np.zeros(p, dtype=np.int64) # cursor buffer for order updates
     
-    best_sum = np.sum(y)
+    best_value = obj.value
     num_cond = 0
 
     for k in range(1, max_depth+1):
         cum_support_count += support_count
-        sum_y = np.sum(y[orders[:support_count, 0]])
+
+        obj.support(orders[:support_count, 0])
+        
         best_j, best_i, best_s = -1, -1, 1
         improvement = False
         for j in range(p):
-            sum_left, sum_right = 0, sum_y
+
+            obj.reset()
+            
             for i in range(support_count - 1): 
                 # test splits between x^j_i (last left) and x^j_i+1 (first right)
-                y_i = y[orders[i, j]]
-                sum_left += y_i
-                sum_right -= y_i
+                
+                obj.remove(orders[i, j])
+                
                 if x[orders[i, j], j]==x[orders[i+1, j], j]:
                     non_separable += 1
                     continue
 
-                if sum_left > best_sum:
+                if obj.value_removed > best_value:
                     best_i = i
                     best_j = j
                     best_s = -1
-                    best_sum = sum_left
+                    best_value = obj.value_removed
                     improvement = True
-                elif sum_right > best_sum:
+                elif obj.value_remaining > best_value:
                     best_i = i
                     best_j = j
                     best_s = 1
-                    best_sum = sum_right
+                    best_value = obj.value_remaining
                     improvement = True
 
         if not improvement:
@@ -665,7 +694,7 @@ def max_weighted_support_greedy(x, y, max_depth=5):
             support_count = best_i + 1
 
     res = Propositionalization(v[:num_cond], t[:num_cond], s[:num_cond])
-    return res, best_sum, {'cum_support_count': cum_support_count,
+    return res, best_value, {'cum_support_count': cum_support_count,
                            'non_separable': non_separable}
 
 
