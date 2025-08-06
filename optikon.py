@@ -135,12 +135,39 @@ def make_maxheap_class(KeyType, NodeType):
 @jitclass
 class Propositionalization:
     """
-    Represents a fixed propositionalization over a d-dimensional dataset.
+    Array of simple threshold propositions over a d-dimensional dataset.
 
     Each of the p propositions represents an inequality s*x_v >= t defined by:
       - a variable index v in {0, ..., d-1},
       - a float64 threshold t,
       - and a sign s in {-1, 1} indicating the direction of comparison.
+
+    That is, for s=-1, the represented proposition can be read as an upper
+    bound x_v <= -t .
+
+    Propositionalizations can be used to represent conjunctions 
+    (see `suppport_all` and `as_conj_str`), disjunctions, or some base 
+    collection of propositions, from which to find optimal subsets.
+
+    For the latter, class supports NumPy-style indexing to extract subsets
+    of propositions, including slicing, integer arrays, and boolean masks
+    (see `__getitem__`).
+    
+    For example:
+        `p[:2]` returns the first two propositions.
+        `p[p.s == -1]` selects all propositions with negative sign.
+    
+    Note that even a single index like `p[0]` returns a Propositionalization
+    with one proposition, not a scalar.
+
+    Parameters
+    ----------
+    v : int64[:]
+        Array of variable indices for each proposition.
+    t : float64[:]
+        Array of thresholds for each proposition.
+    s : int64[:]
+        Array of signs (-1 or 1) for each proposition.
     """
 
     v: int64[:]
@@ -262,6 +289,32 @@ class Propositionalization:
         return self.s*x[:, self.v] >= self.t
     
     def __getitem__(self, idxs):
+        """
+        Return a new Propositionalization with a subset of propositions.
+
+        Parameters
+        ----------
+        idxs : int, slice, array-like of int, or boolean array
+            Indices selecting the propositions to keep. Supports all 
+            standard NumPy indexing modes.
+
+        Returns
+        -------
+        Propositionalization
+            A new object containing only the selected propositions.
+
+        Notes
+        -----
+        Even a single integer index (e.g., `p[0]`) returns a new
+        Propositionalization with one element, not a scalar proposition.
+
+        Examples
+        --------
+        >>> p[:3]          # first three propositions
+        >>> p[[0, 2, 4]]   # specific indices
+        >>> p[p.s == -1]   # boolean mask
+        >>> p[0]           # propositionalization with first proposition
+        """
         return Propositionalization(self.v[idxs], self.t[idxs], self.s[idxs])
 
     def __len__(self):
