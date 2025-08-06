@@ -40,19 +40,25 @@ def diblock_mvn_sample(n, k=2, rho_within=0.5, rho_between=-0.5, seed=0):
 
 class TestInput:
 
-    def __init__(self, x, y, prop_fac, selectable_sups, opt_weighted_support=None, opt_weighted_support_set=None):
+    def __init__(self, x, w, 
+                 prop_fac=None, 
+                 selectable_sups=None, 
+                 opt_weighted_support=None, 
+                 opt_weighted_support_set=None,
+                 opt_normalized_weighted_support=None):
         self.x = x
-        self.y = y
+        self.y = w
         self.prop_fac = prop_fac
         self.selectable_sups = selectable_sups
         self.opt_weighted_support = opt_weighted_support
         self.opt_weighted_support_set = opt_weighted_support_set
+        self.opt_normalized_weighted_support = opt_normalized_weighted_support
 
 TINY_1 = TestInput(
     np.array([[1], [2], [3], [4]]),
     np.array([-1, 1, 1, -1]),
-    full_propositionalization,
-    [
+    prop_fac=full_propositionalization,
+    selectable_sups=[
         [],
         [0],
         [0, 1],
@@ -65,8 +71,8 @@ TINY_1 = TestInput(
         [2, 3],
         [3]
     ],
-    2,
-    np.array([1, 2]))
+    opt_weighted_support=2,
+    opt_weighted_support_set=np.array([1, 2]))
 
 _SMALL_1_x = np.array([
                 [0.0, 1.0, 3.0],
@@ -79,8 +85,8 @@ _SMALL_1_x = np.array([
 SMALL_1 = TestInput(
     _SMALL_1_x,
     np.array([-1, 1, 1, -1, 1]),
-    full_propositionalization,
-    [
+    prop_fac=full_propositionalization,
+    selectable_sups=[
     [0, 1, 2, 3, 4],
     [0, 1, 2, 3],
     [0, 1, 2],
@@ -104,6 +110,7 @@ SMALL_1 = TestInput(
     [1, 4],
     [2, 4]
     ],
-    3,
-    np.array([1, 2, 4])
+    opt_weighted_support=3,
+    opt_weighted_support_set=np.array([1, 2, 4]),
+    opt_normalized_weighted_support=3/3**0.5
 )
