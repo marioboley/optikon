@@ -617,7 +617,7 @@ class WeightedSupport:
         self.value_remaining -= yi
 
 @jitclass
-class NormalisedWeightedSupport:
+class NormalizedWeightedSupport:
 
     w: float64[:]
     u: float64[:]

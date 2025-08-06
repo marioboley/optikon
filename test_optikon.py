@@ -1,7 +1,7 @@
 import numpy as np
 import numba as nb
 import pytest
-from optikon import sort_columns, compute_bounds, make_maxheap_class, max_weighted_support_bb, greedy_maximization, Propositionalization, full_propositionalization, equal_width_propositionalization, empty_propositionalization, WeightedSupport, NormalisedWeightedSupport
+from optikon import sort_columns, compute_bounds, make_maxheap_class, max_weighted_support_bb, greedy_maximization, Propositionalization, full_propositionalization, equal_width_propositionalization, empty_propositionalization, WeightedSupport, NormalizedWeightedSupport
 from testdata import SMALL_1, TINY_1
 from math import isclose
 
@@ -102,7 +102,7 @@ def test_greedy_max_weighted_support(case):
 
 @pytest.mark.parametrize('case', [SMALL_1])
 def test_greedy_max_normalized_weighted_support(case):
-    res, val, _ = greedy_maximization(case.x, NormalisedWeightedSupport(case.y))
+    res, val, _ = greedy_maximization(case.x, NormalizedWeightedSupport(case.y))
     assert isclose(val, case.opt_normalized_weighted_support)
     # np.testing.assert_array_equal(res.support_all(case.x), case.opt_weighted_support_set)
 
