@@ -646,6 +646,44 @@ def max_weighted_support_bb(x, y, prop, max_depth=4):
 
 @jitclass
 class WeightedSupport:
+    """
+    Objective function tracking total weight over a support set.
+
+    Computes the sum of weights for a given support and allows 
+    incremental updates (see `remove` and `reset`).
+
+    Parameters
+    ----------
+    w : float64[:]
+        Weight vector over the dataset.
+
+    Attributes
+    ----------
+    value : float
+        Total weight of the current support.
+    value_removed : float
+        Cumulative weight of removed elements.
+    value_remaining : float
+        Remaining weight (i.e., value - value_removed).
+
+    Examples
+    --------
+    >>> w = np.array([1.0, 2.0, 3.0])
+    >>> obj = WeightedSupport(w)
+    >>> obj.support(np.array([0, 2]))
+    >>> obj.value
+    4.0
+
+    >>> obj.remove(2)
+    >>> obj.value_removed
+    3.0
+    >>> obj.value_remaining
+    1.0
+
+    >>> obj.reset()
+    >>> obj.value_remaining
+    4.0
+    """
 
     w: float64[:]
     value: float64
@@ -671,6 +709,59 @@ class WeightedSupport:
 
 @jitclass
 class NormalizedWeightedSupport:
+    """
+    Objective function: normalized sum of weights over a support set, i.e.,
+
+        value = sum(w[support]) / (sum(u[support])**(1/norm) + lam)
+
+    where:
+      - `w` are sample weights,
+      - `u` are normalization weights (defaults to ones),
+      - `norm` specifies the p-norm used for normalization,
+      - and `lam` is an additive regularization constant.
+
+    The object also supports incremental updates via `remove` and `reset`.
+
+    Parameters
+    ----------
+    w : float64[:]
+        Weight vector over the dataset.
+    u : float64[:], optional
+        Normalization weights. Should be positive. If None, defaults to all ones.
+    norm : float, default=2
+        The p of the p-norm used for normalization.
+    lam : float, default=0
+        Additive regularization in the denominator.
+
+    Attributes
+    ----------
+    value : float
+        Normalized objective value of the current support.
+    value_removed : float
+        Objective value of the removed portion.
+    value_remaining : float
+        Objective value of the remaining portion.
+
+    sum_w_all : float
+        Total weight of the current support.
+    sum_u_all : int
+        Total normalization weight of the current support.
+
+    Examples
+    --------
+    >>> w = np.array([2.0, 4.0, 6.0])
+    >>> u = np.array([1.0, 1.0, 1.0])
+    >>> obj = NormalizedWeightedSupport(w, u, norm=1, lam=0)
+    >>> obj.support(np.array([0, 1, 2]))
+    >>> obj.value
+    12.0 / 3.0  # = 4.0
+
+    >>> obj.remove(1)
+    >>> obj.value_removed
+    4.0 / 1.0  # = 4.0
+    >>> obj.value_remaining
+    8.0 / 2.0  # = 4.0
+    """
 
     w: float64[:]
     u: float64[:]
