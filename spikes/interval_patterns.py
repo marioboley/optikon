@@ -124,7 +124,7 @@ def prefix_preserving_threshold_bounds(x, orders):
 
 
 @jitclass
-class FastCanonicalTreeSearchNode:
+class IntervalPatternSearchNode:
     l: float64[:]
     u: float64[:]
     support: int64[:]
@@ -158,7 +158,7 @@ class FastCanonicalTreeSearchNode:
                 r += 1
             if self.u[j] < np.inf:
                 v[r] = j
-                t[r] = self.u[j]
+                t[r] = -self.u[j]
                 s[r] = -1
                 r += 1
         return Propositionalization(v, t, s)
@@ -191,12 +191,12 @@ class FastCanonicalTreeSearch:
             if np.isposinf(node.u[j]):
 
                 # create all canonical nodes from upper bounds
-                for i in range(len(node.support)-1, 0, -1):
+                for i in range(len(node.support)-2, 0, -1):
                     if x_sub[sub_orders[i, j], j] >= min_pp_ub[j]:
                         _u = node.u.copy()
-                        _u[j] = sub_orders[i, j]
+                        _u[j] = x_sub[sub_orders[i, j], j]
                         _sup = node.support[np.flatnonzero(x_sub[:, j] <= x_sub[sub_orders[i, j], j])]
-                        res.append(FastCanonicalTreeSearchNode(node.l, _u, _sup))
+                        res.append(IntervalPatternSearchNode(node.l, _u, _sup))
 
                 if np.isneginf(node.l[j]):
 
@@ -204,9 +204,9 @@ class FastCanonicalTreeSearch:
                     for i in range(1, len(node.support)):
                         if x_sub[sub_orders[i, j], j] <= max_pp_lb[j]:
                             _l = node.l.copy()
-                            _l[j] = sub_orders[i, j]
+                            _l[j] = x_sub[sub_orders[i, j], j]
                             _sup = node.support[np.flatnonzero(x_sub[:, j] >= x_sub[sub_orders[i, j], j])]
-                            res.append(FastCanonicalTreeSearchNode(_l, node.u, _sup))
+                            res.append(IntervalPatternSearchNode(_l, node.u, _sup))
 
         return res
 
@@ -214,7 +214,7 @@ class FastCanonicalTreeSearch:
     def make_root(self):
         n, d = self.x.shape
         l, u = np.full(d, -np.inf), np.full(d, np.inf)
-        return FastCanonicalTreeSearchNode(l, u, np.arange(n))
+        return IntervalPatternSearchNode(l, u, np.arange(n))
 
     def run(self, max_depth=8):
         heap = []
@@ -226,6 +226,7 @@ class FastCanonicalTreeSearch:
         heapq.heappush(heap, (-2*len(root.l), 0))
 
         best_value = 0
+        best_node = root
         created = 1
         # non_canonical = 0
 
@@ -256,6 +257,7 @@ class FastCanonicalTreeSearch:
                 bnd = 2*len(child.l)
                 if val > best_value:
                     best_value = val
+                    best_node = child
 
                 if len(freelist) > 0:
                     reuse_idx = freelist.pop()
@@ -265,16 +267,18 @@ class FastCanonicalTreeSearch:
                     nodes.append(child)
                     heapq.heappush(heap, (-bnd, len(nodes) - 1))
 
+        print("Best", best_node.l, best_node.u)
         print("Best value:", best_value)
         print("Total nodes created:", created)
         # print("None canonical edges:", non_canonical)
-        return best_value
+        return best_node.to_propositionalization(), best_value
 
 
-# x2 = CORRELATED_UNCORRELATED_OUTLIER.x
-# prop2 = full_propositionalization(x2)
-# fast_search2 = FastCanonicalTreeSearch(x2, prop2)
-# fast_search2.run()
+from testdata import SMALL_1
+x2 = SMALL_1.x
+fast_search2 = FastCanonicalTreeSearch(x2)
+best2, val2 = fast_search2.run()
+print(best2.as_conj_str())
 
 # import sys
 # with open('new_supports2.txt', 'w') as f:
@@ -288,3 +292,5 @@ class FastCanonicalTreeSearch:
 x = diblock_mvn_sample(100, seed=0)
 fast_search = FastCanonicalTreeSearch(x)
 fast_search.run(2)
+print(x.max(axis=0))
+print(x[71])
