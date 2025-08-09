@@ -195,28 +195,29 @@ class FastCanonicalTreeSearch:
                 # should we create view: vals = x_sub[sub_orders[:, j], j]
                 # or would this be detremental for performance?
 
+                col = x_sub[:, j]
+                order = sub_orders[:, j]
+
                 # create all canonical nodes from upper bounds
                 for i in range(len(node.support)-2, -1, -1):
-                    if x_sub[sub_orders[i, j], j] < x_sub[sub_orders[i+1, j], j] and \
-                        x_sub[sub_orders[i, j], j] >= min_pp_ub[j]:
-
+                    t = col[order[i]] 
+                    if t < col[order[i+1]] and t >= min_pp_ub[j]:
                         _u = node.u.copy()
-                        _u[j] = x_sub[sub_orders[i, j], j]
-                        _sup = node.support[np.flatnonzero(x_sub[:, j] <= x_sub[sub_orders[i, j], j])]
-                        # should be more efficient: _sup = node.support[sub_orders[:i+1, j]]
+                        _u[j] = t
+                        _sup = node.support[np.flatnonzero(col <= t)]
+                        # probably cheaper but changes order: _sup = node.support[order[:i+1]]
                         res.append(IntervalPatternSearchNode(node.l, _u, _sup, j+1))
 
                 if np.isneginf(node.l[j]):
 
                     # create all canonical nodes from lower bounds
                     for i in range(1, len(node.support)):
-                        if x_sub[sub_orders[i, j], j] > x_sub[sub_orders[i-1, j], j] and \
-                            x_sub[sub_orders[i, j], j] <= max_pp_lb[j]:
-
+                        t = col[order[i]] 
+                        if t > col[order[i-1]] and t <= max_pp_lb[j]:
                             _l = node.l.copy()
-                            _l[j] = x_sub[sub_orders[i, j], j]
-                            _sup = node.support[np.flatnonzero(x_sub[:, j] >= x_sub[sub_orders[i, j], j])]
-                            # should be more efficient: _sup = node.support[sub_orders[i:, j]]
+                            _l[j] = t
+                            _sup = node.support[np.flatnonzero(col >= t)]
+                            # probably cheaper but changes order: _sup = node.support[order[i:]]
                             res.append(IntervalPatternSearchNode(_l, node.u, _sup, j))
 
         return res
@@ -292,7 +293,7 @@ x2 = SMALL_1.x
 fast_search2 = FastCanonicalTreeSearch(x2)
 best2, val2 = fast_search2.run()
 print(best2.as_conj_str())
-print(x2)
+# print(x2)
 
 # import sys
 # with open('new_supports2.txt', 'w') as f:
@@ -303,9 +304,11 @@ print(x2)
 #     fast_search.run(2)
 
 
-# x = diblock_mvn_sample(100, seed=0)
-# fast_search = FastCanonicalTreeSearch(x)
-# fast_search.run(2)
+x = diblock_mvn_sample(100, seed=0)
+fast_search = FastCanonicalTreeSearch(x)
+best, val = fast_search.run(3)
+print(best.as_conj_str())
+
 # print(x.max(axis=0))
 # print(np.sort(x, axis=0)[::-1][:10])
 # print(np.argsort(x, axis=0)[::-1][:10])
