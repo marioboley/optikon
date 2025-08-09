@@ -128,11 +128,13 @@ class IntervalPatternSearchNode:
     l: float64[:]
     u: float64[:]
     support: int64[:]
+    min_active_j: int64
 
-    def __init__(self, l, u, support):
+    def __init__(self, l, u, support, min_active_j):
         self.l = l
         self.u = u
         self.support = support
+        self.min_active_j = min_active_j
 
     def num_non_trivial_bounds(self):
         res = 0
@@ -186,27 +188,36 @@ class FastCanonicalTreeSearch:
 
         res = []
 
-        for j in range(self.d):
+        for j in range(node.min_active_j, self.d):
 
             if np.isposinf(node.u[j]):
 
+                # should we create view: vals = x_sub[sub_orders[:, j], j]
+                # or would this be detremental for performance?
+
                 # create all canonical nodes from upper bounds
-                for i in range(len(node.support)-2, 0, -1):
-                    if x_sub[sub_orders[i, j], j] >= min_pp_ub[j]:
+                for i in range(len(node.support)-2, -1, -1):
+                    if x_sub[sub_orders[i, j], j] < x_sub[sub_orders[i+1, j], j] and \
+                        x_sub[sub_orders[i, j], j] >= min_pp_ub[j]:
+
                         _u = node.u.copy()
                         _u[j] = x_sub[sub_orders[i, j], j]
                         _sup = node.support[np.flatnonzero(x_sub[:, j] <= x_sub[sub_orders[i, j], j])]
-                        res.append(IntervalPatternSearchNode(node.l, _u, _sup))
+                        # should be more efficient: _sup = node.support[sub_orders[:i+1, j]]
+                        res.append(IntervalPatternSearchNode(node.l, _u, _sup, j+1))
 
                 if np.isneginf(node.l[j]):
 
                     # create all canonical nodes from lower bounds
                     for i in range(1, len(node.support)):
-                        if x_sub[sub_orders[i, j], j] <= max_pp_lb[j]:
+                        if x_sub[sub_orders[i, j], j] > x_sub[sub_orders[i-1, j], j] and \
+                            x_sub[sub_orders[i, j], j] <= max_pp_lb[j]:
+
                             _l = node.l.copy()
                             _l[j] = x_sub[sub_orders[i, j], j]
                             _sup = node.support[np.flatnonzero(x_sub[:, j] >= x_sub[sub_orders[i, j], j])]
-                            res.append(IntervalPatternSearchNode(_l, node.u, _sup))
+                            # should be more efficient: _sup = node.support[sub_orders[i:, j]]
+                            res.append(IntervalPatternSearchNode(_l, node.u, _sup, j))
 
         return res
 
@@ -214,7 +225,7 @@ class FastCanonicalTreeSearch:
     def make_root(self):
         n, d = self.x.shape
         l, u = np.full(d, -np.inf), np.full(d, np.inf)
-        return IntervalPatternSearchNode(l, u, np.arange(n))
+        return IntervalPatternSearchNode(l, u, np.arange(n), 0)
 
     def run(self, max_depth=8):
         heap = []
@@ -235,12 +246,13 @@ class FastCanonicalTreeSearch:
             node = nodes[idx]
             freelist.append(idx)
 
-            # if tuple(node.support) in self.sups_to_keys:
-            #     print('sup', node.support, 'enumerated twice')
-            #     print('first from', self.sups_to_keys[tuple(node.support)], '(', node.to_propositionalization().as_conj_str() ,')')
-            #     print('then again from', node.key, '(', node.to_propositionalization().as_conj_str(node.key) ,')')
-            #     break
-            # self.sups_to_keys[tuple(node.support)]=(node.l, node.u)
+            if tuple(node.support) in self.sups_to_keys:
+                print('sup', node.support, 'enumerated repeatedly')
+                old_l, old_u = self.sups_to_keys[tuple(node.support)]
+                print('first from', (old_l, old_u)) #, '(', IntervalPatternSearchNode(old_l, old_u, node.support).to_propositionalization().as_conj_str() ,')')
+                print('then again from', (node.l, node.u)) #, '(', node.to_propositionalization().as_conj_str() ,')')
+                # break
+            self.sups_to_keys[tuple(node.support)]=(node.l, node.u)
 
             if -neg_bound < best_value:
                 continue
@@ -255,6 +267,7 @@ class FastCanonicalTreeSearch:
 
                 val = child.num_non_trivial_bounds()
                 bnd = 2*len(child.l)
+                
                 if val > best_value:
                     best_value = val
                     best_node = child
@@ -279,6 +292,7 @@ x2 = SMALL_1.x
 fast_search2 = FastCanonicalTreeSearch(x2)
 best2, val2 = fast_search2.run()
 print(best2.as_conj_str())
+print(x2)
 
 # import sys
 # with open('new_supports2.txt', 'w') as f:
@@ -289,8 +303,11 @@ print(best2.as_conj_str())
 #     fast_search.run(2)
 
 
-x = diblock_mvn_sample(100, seed=0)
-fast_search = FastCanonicalTreeSearch(x)
-fast_search.run(2)
-print(x.max(axis=0))
-print(x[71])
+# x = diblock_mvn_sample(100, seed=0)
+# fast_search = FastCanonicalTreeSearch(x)
+# fast_search.run(2)
+# print(x.max(axis=0))
+# print(np.sort(x, axis=0)[::-1][:10])
+# print(np.argsort(x, axis=0)[::-1][:10])
+
+# print(x[71])
