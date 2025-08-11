@@ -36,9 +36,10 @@ def range_preserving_suffix_and_prefix(x):
         x (ndarray): non-empty array of shape (m,).
 
     Returns:
-        Tuple[int, int]: (i, j) such that i is the largest index such that all occurrences
-        of both x.min() and x.max() are still present in x[i:], and j is the the smallest
-        index j such that all occurrences are still present in x[:j+1].
+        Tuple[int, int]: (i, j) such that i is the largest index such that at least on
+        occurrences of each x.min() and x.max() are still present in x[i:], and j is
+        the smallest index j such that at least one of those occurrences are
+        still present in x[:j+1].
 
     Note:
         The function runs in O(m)
@@ -84,7 +85,8 @@ def range_preserving_suffix_and_prefix(x):
 @njit
 def prefix_preserving_threshold_bounds(x, orders):
     """
-    Computes prefix preserving upper and lower bound for thresholding each variable of a dataset. 
+    Computes prefix preserving upper and lower bound for thresholding each variable of a 
+    non empty-dataset. 
 
     Specifically, for each variable k, this function computes:
       - the largest threshold l for restricting the dataset via x[:, k] >= l and
@@ -92,7 +94,7 @@ def prefix_preserving_threshold_bounds(x, orders):
     such that those restrictions do not reduce the value range of all variables j < k.
 
     Args:
-        x (ndarray): A dataset of shape (m, d).
+        x (ndarray): A non-empty dataset of shape (m, d).
         orders (ndarray): An array of shape (m, d), where each column contains the 
             indices that would sort x[:, k] in ascending order.
 
@@ -137,27 +139,32 @@ def prefix_preserving_threshold_bounds(x, orders):
     return max_pp_lb_thresholds, min_pp_ub_thresholds
 
 @njit
-def prefix_preserving_index_bounds(x, orders):
+def prefix_preserving_index_bounds(x, orders, min_k=0):
     """
-    Computes prefix preserving upper and lower bound for thresholding each variable of a dataset. 
+    Computes longest non-empty prefix-preserving index ranges for each variable in a dataset.
 
-    Specifically, for each variable k, this function computes:
-      - the largest threshold l for restricting the dataset via x[:, k] >= l and
-      - the smallest threshold u for restricting the dataset via x[:, k] <= u
+    Specifically, for each variable k >= min_k, this function computes:
+      - the largest index l for restricting the dataset via x[:, k] >= x[orders[l, k]],
+        or equivalently to x[orders[l:, k]], and
+      - the smallest index u for restricting the dataset via x[:, k] <= x[orders[u, k]]
+        or equivalently to x[orders[:u+1, k]]
     such that those restrictions do not reduce the value range of all variables j < k.
 
     Args:
         x (ndarray): A dataset of shape (m, d).
         orders (ndarray): An array of shape (m, d), where each column contains the 
             indices that would sort x[:, k] in ascending order.
+        min_k (int): smallest index for which to compute value ranges
 
     Returns:
         Tuple[ndarray, ndarray]: Two arrays of shape (d,), where the first contains 
-        the maximal prefix-preserving lower-bound thresholds, and the second contains 
-        the minimal prefix-preserving upper-bound thresholds.
+        the maximal prefix-preserving lower-bound indices, and the second contains 
+        the minimal prefix-preserving upper-bound indices. Arrays are padded with 
+        default values n-1 and 0 for max lower and min upper bounds indices, respectively,
 
     Notes:
-        The function runs in time O(d^2 m)
+        - The function runs in time O((d-min_k)^2 m) <= O(d^2 m)
+        - Default values for k < min_k are n-1 and 0
 
     Examples:
         >>> import numpy as np
@@ -167,15 +174,15 @@ def prefix_preserving_index_bounds(x, orders):
         >>> orders = np.argsort(x, axis=0)
         >>> l, u = prefix_preserving_index_bounds(x, orders)
         >>> np.round(l, 2)
-        array([3, 1, 0])
+        array([2, 1, 0])
         >>> np.round(u, 2)
-        array([-1,  2,  2])
+        array([0, 2, 2])
     """
     n, d = x.shape
     max_pp_lb_indices = np.full(d, n-1, dtype=np.int64)
     min_pp_ub_indices = np.full(d, 0, dtype=np.int64)
 
-    for k in range(d):
+    for k in range(min_k, d):
         for j in range(k):
             l, u = range_preserving_suffix_and_prefix(x[orders[:, k], j])
             if l < max_pp_lb_indices[k]:
@@ -245,7 +252,7 @@ class FastCanonicalTreeSearch:
         x_sub = self.x[node.support]
         sub_orders = np.argsort(x_sub, axis=0)
 
-        max_pp_lb, min_pp_ub = prefix_preserving_index_bounds(x_sub, sub_orders)
+        max_pp_lb, min_pp_ub = prefix_preserving_index_bounds(x_sub, sub_orders, node.min_active_j)
 
         res = []
 
@@ -257,22 +264,18 @@ class FastCanonicalTreeSearch:
             col = x_sub[:, j]
             order = sub_orders[:, j]
 
-            # if np.array_equal(node.l , np.array([1., -np.inf, -np.inf])) and np.array_equal(node.u, np.array([3., np.inf, np.inf])):
-            #     print('refinement generation of x1 in [1, 3]:')
-            #     print('col', j)
-            #     print('max_pp_lb', max_pp_lb[j])
-            #     print('min_pp_ub', min_pp_ub[j])
-
             if np.isneginf(node.l[j]):
                 
                 # create all canonical nodes from lower bounds
+
                 for i in range(1, max_pp_lb[j]+1):
-                    t = col[order[i]] 
+                    t = col[order[i]]
                     if t > col[order[i-1]]:
                         _l = node.l.copy()
                         _l[j] = t
                         _sup = node.support[np.flatnonzero(col >= t)]
                         # probably cheaper but changes order: _sup = node.support[order[i:]]
+
                         res.append(IntervalPatternSearchNode(_l, node.u, _sup, j))
 
 
