@@ -6,7 +6,10 @@ This implementation uses a dummy objective function (number of non-trivial condi
 to complete enumeration, because a trivial bounding function is used.
 
 Author: Mario Boley
-Date  : 2025-08-11
+Date  : 2025-08-10
+
+Revision 1: 2025-08-11
+using prefix preserving indices for simplification
 """
 
 import sys
@@ -169,8 +172,8 @@ def prefix_preserving_index_bounds(x, orders):
         array([-1,  2,  2])
     """
     n, d = x.shape
-    max_pp_lb_indices = np.full(d, n, dtype=np.int64)
-    min_pp_ub_indices = np.full(d, -1, dtype=np.int64)
+    max_pp_lb_indices = np.full(d, n-1, dtype=np.int64)
+    min_pp_ub_indices = np.full(d, 0, dtype=np.int64)
 
     for k in range(d):
         for j in range(k):
@@ -242,7 +245,7 @@ class FastCanonicalTreeSearch:
         x_sub = self.x[node.support]
         sub_orders = np.argsort(x_sub, axis=0)
 
-        max_pp_lb, min_pp_ub = prefix_preserving_threshold_bounds(x_sub, sub_orders)
+        max_pp_lb, min_pp_ub = prefix_preserving_index_bounds(x_sub, sub_orders)
 
         res = []
 
@@ -263,30 +266,25 @@ class FastCanonicalTreeSearch:
             if np.isneginf(node.l[j]):
                 
                 # create all canonical nodes from lower bounds
-                for i in range(1, len(node.support)):
+                for i in range(1, max_pp_lb[j]+1):
                     t = col[order[i]] 
-                    if t <= max_pp_lb[j]:
-                        if t > col[order[i-1]]:
-                            _l = node.l.copy()
-                            _l[j] = t
-                            _sup = node.support[np.flatnonzero(col >= t)]
-                            # probably cheaper but changes order: _sup = node.support[order[i:]]
-                            res.append(IntervalPatternSearchNode(_l, node.u, _sup, j))
-                    else:
-                        break
+                    if t > col[order[i-1]]:
+                        _l = node.l.copy()
+                        _l[j] = t
+                        _sup = node.support[np.flatnonzero(col >= t)]
+                        # probably cheaper but changes order: _sup = node.support[order[i:]]
+                        res.append(IntervalPatternSearchNode(_l, node.u, _sup, j))
+
 
             # create all canonical nodes from upper bounds
-            for i in range(len(node.support)-2, -1, -1):
+            for i in range(len(node.support)-2, min_pp_ub[j]-1, -1):
                 t = col[order[i]] 
-                if t >= min_pp_ub[j]:
-                    if t < col[order[i+1]]:
-                        _u = node.u.copy()
-                        _u[j] = t
-                        _sup = node.support[np.flatnonzero(col <= t)]
-                        # probably cheaper but changes order: _sup = node.support[order[:i+1]]
-                        res.append(IntervalPatternSearchNode(node.l, _u, _sup, j+1))
-                else:
-                    break
+                if t < col[order[i+1]]:
+                    _u = node.u.copy()
+                    _u[j] = t
+                    _sup = node.support[np.flatnonzero(col <= t)]
+                    # probably cheaper but changes order: _sup = node.support[order[:i+1]]
+                    res.append(IntervalPatternSearchNode(node.l, _u, _sup, j+1))
 
         return res
 
