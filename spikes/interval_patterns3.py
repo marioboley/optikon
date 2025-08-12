@@ -268,10 +268,10 @@ class FastIntervalPatternSearch:
 
                     for i in range(1, max_pp_lb[j]+1):
                         t = col_data[order[i]]
-                        wi = w_sub[order[i]]
-                        sum_w -= wi
-                        if wi > 0:
-                            sum_pos_w -= wi
+                        w_rem = w_sub[order[i-1]]
+                        sum_w -= w_rem
+                        if w_rem > 0:
+                            sum_pos_w -= w_rem
 
                         if t > col_data[order[i-1]]:
                             _l = node.l.copy()
@@ -294,8 +294,10 @@ class FastIntervalPatternSearch:
                 sum_pos_w = w_sub_pos.sum()
                 for i in range(len(node.support)-2, min_pp_ub[j]-1, -1):
                     t = col_data[order[i]] 
-                    wi = w_sub[order[i]]
-                    sum_w -= wi
+                    w_rem = w_sub[order[i+1]]
+                    sum_w -= w_rem
+                    if w_rem > 0:
+                        sum_pos_w -= w_rem
                     if t < col_data[order[i+1]]:
                         _u = node.u.copy()
                         _u[j] = t
@@ -329,19 +331,36 @@ if __name__=='__main__':
     import doctest
     doctest.testmod()
 
-    w = np.random.default_rng(seed=0).normal(size=100)
-    x = diblock_mvn_sample(100, seed=0)
+    n = 12
+    # n = 400
+    w = np.random.default_rng(seed=0).normal(size=n)
+    x = diblock_mvn_sample(n, seed=0)
+    x = np.round(x, 3)
+    w = np.round(w, 3)
     fast_search = FastIntervalPatternSearch(x, w)
     best, val = fast_search.run(3)
     print(best.as_conj_str())
+    print(w[best.support_all(x)].sum())
 
-    from testdata import SMALL_1
-    x2 = SMALL_1.x
-    fast_search2 = FastIntervalPatternSearch(x2, SMALL_1.y)
-    best2, val2 = fast_search2.run()
-    print(SMALL_1.opt_weighted_support)
-    print(best2.as_conj_str())
-    print(x2)
+    # from testdata import SMALL_1
+    # x2 = SMALL_1.x
+    # fast_search2 = FastIntervalPatternSearch(x2, SMALL_1.y)
+    # best2, val2 = fast_search2.run()
+    # print(SMALL_1.opt_weighted_support)
+    # print(best2.as_conj_str())
+    # print(x2)
 
-    # from optikon import max_weighted_support_bb, full_propositionalization
-    # max_weighted_support_bb(x, w, full_propositionalization, 3)
+    from optikon import max_weighted_support_bb, full_propositionalization
+    best_control, val_control, stats = max_weighted_support_bb(x, w, full_propositionalization(x), 3)
+    print(best_control.as_conj_str())
+    print(val_control)
+    print(stats['nodes_created'])
+
+    print(x)
+    print(w)
+
+    x_orders = np.argsort(x, axis=0)
+    print(x_orders[:, 2])
+    print(x[x_orders[:, 2], 2])
+    print(x[x_orders[:, 2], 0], min(x[:, 0]), max(x[:, 0]))
+
