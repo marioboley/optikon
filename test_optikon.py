@@ -70,6 +70,14 @@ def test_fullprop():
     assert np.array_equal(prop.v, np.array([0, 0, 0, 0, 1, 1, 1, 1]))
     assert np.array_equal(prop.s*prop.t, np.array([1.0, 0.0, -1.0, 0.0, 5.0, 4.5, 4.0, 4.5]))
 
+def test_full_propositionalization_non_unique_values():
+    x = np.array([[1.0], [2.0], [2.0], [3.0]])
+    prop = full_propositionalization(x)
+    # Expected: lowers strict to weak: >=3, >=2; uppers strict to weak: <=1, <=2
+    # String indices are 1-based (x1), and dec=3 by default.
+    expected = "[x1 >= 3.000, x1 >= 2.000, x1 <= 1.000, x1 <= 2.000]"
+    assert prop.as_str() == expected
+
 def test_equal_width_prop():
     x = np.linspace(0, 12, 27).reshape(-1, 1)
     prop = equal_width_propositionalization(x)

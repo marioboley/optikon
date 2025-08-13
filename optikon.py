@@ -422,7 +422,7 @@ def full_propositionalization(x):
     for v in range(d):
         thresholds = np.unique(x[:, v])
         # lower bounds strictest to weakest, exluding trivial 
-        for t in thresholds[n-1:0:-1]:  
+        for t in thresholds[-1:0:-1]:  
             v_out[count] = v
             t_out[count] = t
             s_out[count] = 1
