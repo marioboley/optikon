@@ -13,6 +13,9 @@ using prefix preserving indices for simplification
 
 Revision 2: 2025-08-11
 use weighted support instead of dummy objective
+
+Revision 3: 2025-08-12
+numba compatible version
 """
 
 import sys
@@ -20,7 +23,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import numpy as np
-from optikon import Propositionalization
+from optikon import IntervalPatternSearchNode, IntervallPatternNodeHeap, make_interval_search_root, argsort_columns
 from testdata import diblock_mvn_sample, SMALL_1
 import heapq
 
@@ -139,57 +142,111 @@ def prefix_preserving_index_bounds(x, orders, min_k=0):
 
     return max_pp_lb_indices, min_pp_ub_indices
 
-@jitclass
-class IntervalPatternSearchNode:
-    l: float64[:]
-    u: float64[:]
-    support: int64[:]
-    pos_support: int64[:]
-    min_active_j: int64
 
-    def __init__(self, l, u, support, pos_support, min_active_j):
-        self.l = l
-        self.u = u
-        self.support = support
-        self.pos_support = pos_support
-        self.min_active_j = min_active_j
-
-    def num_non_trivial_bounds(self):
-        res = 0
-        for j in range(len(self.l)):
-            if self.l[j] > -np.inf:
-                res += 1
-            if self.u[j] < np.inf:
-                res += 1
-        return res
-
-    def to_propositionalization(self):
-        k = self.num_non_trivial_bounds()
-        v = np.zeros(k, dtype=np.int64)
-        t = np.zeros(k, dtype=np.float64)
-        s = np.zeros(k, dtype=np.int64)
-
-        r = 0        
-        for j in range(len(self.l)):
-            if self.l[j] > -np.inf:
-                v[r] = j
-                t[r] = self.l[j]
-                s[r] = 1
-                r += 1
-            if self.u[j] < np.inf:
-                v[r] = j
-                t[r] = -self.u[j]
-                s[r] = -1
-                r += 1
-        return Propositionalization(v, t, s)
+@njit
+def max_weighted_support_fips(x, w, max_depth):
+    n, d = x.shape
+    heap = IntervallPatternNodeHeap()
     
-    # @staticmethod
-    # def root(x, w):
-    #     n, d = x.shape
-    #     l, u = np.full(d, -np.inf), np.full(d, np.inf)
-    #     return IntervalPatternSearchNode(l, u, np.arange(n), np.flatnonzero(w > 0), 0)
+    root = make_interval_search_root(x, w)
+    root_bound = w[root.pos_support].sum()
+    root_value = w.sum()
+    heap.push(root_bound, root)
 
-# FastCanonicalTreeSearchNodeType = FastCanonicalTreeSearchNode
+    best_value = root_value
+    best_node = root
+    created = 1
+
+    while heap:
+        bound, node = heap.pop()
+
+        # print(node.l, node.u, node.support, node.min_active_j)
+
+        if len(node.support) == 0:
+            print('warning: zero support dequeued')
+            continue
+
+        if bound < best_value:
+            continue
+        if node.num_non_trivial_bounds() >= max_depth:
+            continue
+
+        x_sub = x[node.support]
+        sub_orders = argsort_columns(x_sub) # np.argsort(x_sub, axis=0)
+        x_sub_pos = x[node.pos_support]
+        w_sub = w[node.support]
+        w_sub_pos = w[node.pos_support]
+        
+        max_pp_lb, min_pp_ub = prefix_preserving_index_bounds(x_sub, sub_orders, node.min_active_j)
+
+        for j in range(node.min_active_j, d):
+
+            # should we create view: vals = x_sub[sub_orders[:, j], j]
+            # or would this be detremental for performance?
+
+            col_data = x_sub[:, j]
+            order = sub_orders[:, j]
+            pos_col_data = x_sub_pos[:, j]
+
+            if np.isneginf(node.l[j]):
+                
+                # create all canonical nodes from lower bounds
+
+                sum_w = w_sub.sum()
+                sum_pos_w = w_sub_pos.sum()
+
+                for i in range(1, max_pp_lb[j]+1):
+                    t = col_data[order[i]]
+                    w_rem = w_sub[order[i-1]]
+                    sum_w -= w_rem
+                    if w_rem > 0:
+                        sum_pos_w -= w_rem
+
+                    if t > col_data[order[i-1]]:
+                        _l = node.l.copy()
+                        _l[j] = t
+                        _sup = node.support[np.flatnonzero(col_data >= t)]
+                        _pos_sup = node.pos_support[np.flatnonzero(pos_col_data >= t)]
+                        # probably cheaper but changes order: _sup = node.support[order[i:]]
+                        
+                        child = IntervalPatternSearchNode(_l, node.u, _sup, _pos_sup, j)
+                        if sum_w > best_value:
+                            best_value = sum_w
+                            best_node = child
+                        if sum_pos_w > best_value:
+                            heap.push(sum_pos_w, child)
+                        else:
+                            break
+                        
+            # create all canonical nodes from upper bounds
+            sum_w = w_sub.sum()
+            sum_pos_w = w_sub_pos.sum()
+            for i in range(len(node.support)-2, min_pp_ub[j]-1, -1):
+                t = col_data[order[i]] 
+                w_rem = w_sub[order[i+1]]
+                sum_w -= w_rem
+                if w_rem > 0:
+                    sum_pos_w -= w_rem
+                if t < col_data[order[i+1]]:
+                    _u = node.u.copy()
+                    _u[j] = t
+                    _sup = node.support[np.flatnonzero(col_data <= t)]
+                    _pos_sup = node.pos_support[np.flatnonzero(pos_col_data <= t)]
+                    # probably cheaper but changes order: _sup = node.support[order[:i+1]]
+                    child = IntervalPatternSearchNode(node.l, _u, _sup, _pos_sup, j+1)
+                    if sum_w > best_value:
+                        best_value = sum_w
+                        best_node = child
+                    if sum_pos_w > best_value:
+                        heap.push(sum_pos_w, child)
+                    else:
+                        break
+
+    print("Best", best_node.l, best_node.u)
+    print("Best value:", best_value)
+    print("Total nodes created:", created)
+    # print("None canonical edges:", non_canonical)
+    return best_node.to_propositionalization(), best_value
 
 class FastIntervalPatternSearch:
 
@@ -340,8 +397,10 @@ if __name__=='__main__':
     x = diblock_mvn_sample(n, seed=0)
     # x = np.round(x, 3)
     # w = np.round(w, 3)
-    fast_search = FastIntervalPatternSearch(x, w)
-    best, val = fast_search.run(2)
+    # fast_search = FastIntervalPatternSearch(x, w)
+    # best, val = fast_search.run(2)
+
+    best, val = max_weighted_support_fips(x, w, 2)
     print(best.as_conj_str())
     print(w[best.support_all(x)].sum())
 

@@ -571,6 +571,59 @@ class LexTreeSearchNode:
 # NODE_TYPE = Node.class_type.instance_type  
 NodeHeap = make_maxheap_class(float64, LexTreeSearchNode.class_type.instance_type)
 
+@jitclass
+class IntervalPatternSearchNode:
+    l: float64[:]
+    u: float64[:]
+    support: int64[:]
+    pos_support: int64[:]
+    min_active_j: int64
+
+    def __init__(self, l, u, support, pos_support, min_active_j):
+        self.l = l
+        self.u = u
+        self.support = support
+        self.pos_support = pos_support
+        self.min_active_j = min_active_j
+
+    def num_non_trivial_bounds(self):
+        res = 0
+        for j in range(len(self.l)):
+            if self.l[j] > -np.inf:
+                res += 1
+            if self.u[j] < np.inf:
+                res += 1
+        return res
+
+    def to_propositionalization(self):
+        k = self.num_non_trivial_bounds()
+        v = np.zeros(k, dtype=np.int64)
+        t = np.zeros(k, dtype=np.float64)
+        s = np.zeros(k, dtype=np.int64)
+
+        r = 0        
+        for j in range(len(self.l)):
+            if self.l[j] > -np.inf:
+                v[r] = j
+                t[r] = self.l[j]
+                s[r] = 1
+                r += 1
+            if self.u[j] < np.inf:
+                v[r] = j
+                t[r] = -self.u[j]
+                s[r] = -1
+                r += 1
+        return Propositionalization(v, t, s)
+
+@njit
+def make_interval_search_root(x, w):
+    n, d = x.shape
+    l, u = np.full(d, -np.inf), np.full(d, np.inf)
+    return IntervalPatternSearchNode(l, u, np.arange(n), np.flatnonzero(w > 0), 0)
+    
+IntervallPatternNodeHeap = make_maxheap_class(float64, IntervalPatternSearchNode.class_type.instance_type)
+
+
 @njit
 def make_lex_treesearch_root(x, y, prop):
     l, u = compute_bounds(x)
