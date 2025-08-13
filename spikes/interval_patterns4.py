@@ -27,9 +27,9 @@ from optikon import IntervalPatternSearchNode, IntervallPatternNodeHeap, make_in
 from testdata import diblock_mvn_sample, SMALL_1
 import heapq
 
-from numba import njit
+from numba import njit, types
 from numba.experimental import jitclass
-from numba.types import int64, float64
+from numba.types import int64, float64, intp
 import numpy as np
 
 @njit
@@ -142,10 +142,9 @@ def prefix_preserving_index_bounds(x, orders, min_k=0):
 
     return max_pp_lb_indices, min_pp_ub_indices
 
-
 @njit
 def max_weighted_support_fips(x, w, max_depth):
-    n, d = x.shape
+    _, d = x.shape
     heap = IntervallPatternNodeHeap()
     
     root = make_interval_search_root(x, w)
@@ -155,12 +154,11 @@ def max_weighted_support_fips(x, w, max_depth):
 
     best_value = root_value
     best_node = root
-    created = 1
+    nodes_created = 1
+    nodes_enqueued = 1
 
     while heap:
         bound, node = heap.pop()
-
-        # print(node.l, node.u, node.support, node.min_active_j)
 
         if len(node.support) == 0:
             print('warning: zero support dequeued')
@@ -210,11 +208,13 @@ def max_weighted_support_fips(x, w, max_depth):
                         # probably cheaper but changes order: _sup = node.support[order[i:]]
                         
                         child = IntervalPatternSearchNode(_l, node.u, _sup, _pos_sup, j)
+                        nodes_created += 1
                         if sum_w > best_value:
                             best_value = sum_w
                             best_node = child
                         if sum_pos_w > best_value:
                             heap.push(sum_pos_w, child)
+                            nodes_enqueued += 1
                         else:
                             break
                         
@@ -234,19 +234,22 @@ def max_weighted_support_fips(x, w, max_depth):
                     _pos_sup = node.pos_support[np.flatnonzero(pos_col_data <= t)]
                     # probably cheaper but changes order: _sup = node.support[order[:i+1]]
                     child = IntervalPatternSearchNode(node.l, _u, _sup, _pos_sup, j+1)
+                    nodes_created += 1
                     if sum_w > best_value:
                         best_value = sum_w
                         best_node = child
                     if sum_pos_w > best_value:
                         heap.push(sum_pos_w, child)
+                        nodes_enqueued += 1
                     else:
                         break
 
-    print("Best", best_node.l, best_node.u)
-    print("Best value:", best_value)
-    print("Total nodes created:", created)
-    # print("None canonical edges:", non_canonical)
-    return best_node.to_propositionalization(), best_value
+    return best_node.to_propositionalization(), best_value, {'nodes_created': nodes_created,
+                                                             'nodes_enqueued': nodes_enqueued}
+
+max_weighted_support_fips.compile((types.Array(float64, 2, 'C'), types.Array(float64, 1, 'C'), intp))
+max_weighted_support_fips.compile((types.Array(float64, 2, 'F'), types.Array(float64, 1, 'C'), intp))
+max_weighted_support_fips.compile((types.Array(float64, 2, 'A'), types.Array(float64, 1, 'A'), intp))
 
 class FastIntervalPatternSearch:
 
@@ -391,18 +394,30 @@ if __name__=='__main__':
     import doctest
     doctest.testmod()
 
+    import time
     # n = 12
-    n = 100
+    n = 400
     w = np.random.default_rng(seed=0).normal(size=n)
     x = diblock_mvn_sample(n, seed=0)
     # x = np.round(x, 3)
     # w = np.round(w, 3)
-    # fast_search = FastIntervalPatternSearch(x, w)
-    # best, val = fast_search.run(2)
 
-    best, val = max_weighted_support_fips(x, w, 2)
-    print(best.as_conj_str())
-    print(w[best.support_all(x)].sum())
+    print('Python version')
+    start = time.perf_counter()
+    fast_search = FastIntervalPatternSearch(x, w)
+    best, val = fast_search.run(2)
+    end = time.perf_counter()
+    print(f'Time: {end - start:.6f} s')
+
+    print('Numba version')
+    max_weighted_support_fips(x, w, 2)
+    start = time.perf_counter()
+    best, val, stats = max_weighted_support_fips(x, w, 2)
+    end = time.perf_counter()
+    print('Best:', best.as_conj_str())
+    print('Value:', w[best.support_all(x)].sum())
+    print('Stats:', stats)
+    print(f'Time: {end - start:.6f} s')
 
     # from testdata import SMALL_1
     # x2 = SMALL_1.x
@@ -414,10 +429,16 @@ if __name__=='__main__':
 
     from optikon import max_weighted_support_bb, full_propositionalization
     props = full_propositionalization(x)
-    best_control, val_control, stats = max_weighted_support_bb(x, w, props, 2)
-    print(best_control.as_conj_str())
-    print(val_control)
-    print(stats['nodes_created'])
+
+    print('Old canonical treesearch version:')
+    max_weighted_support_bb(x, w, props, 2)
+    start = time.perf_counter()
+    best_control, val_control, stats_control = max_weighted_support_bb(x, w, props, 2)
+    end = time.perf_counter()
+    print('Best:', best_control.as_conj_str())
+    print('Value:', val_control)
+    print('Stats:', stats_control)
+    print(f'Time: {end - start:.6f} s')
     # print(props.as_str())
 
     # print(x)

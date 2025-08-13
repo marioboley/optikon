@@ -1,7 +1,7 @@
 import numpy as np
 import numba as nb
 import pytest
-from optikon import sort_columns, compute_bounds, make_maxheap_class, max_weighted_support_bb, greedy_maximization, Propositionalization, full_propositionalization, equal_width_propositionalization, empty_propositionalization, WeightedSupport, NormalizedWeightedSupport
+from optikon import sort_columns, compute_bounds, make_maxheap_class, max_weighted_support_bb, max_weighted_support_fips, greedy_maximization, Propositionalization, full_propositionalization, equal_width_propositionalization, empty_propositionalization, WeightedSupport, NormalizedWeightedSupport
 from testdata import SMALL_1, TINY_1
 from math import isclose
 
@@ -99,6 +99,12 @@ def test_propositionalisation_fancy_indexing():
 @pytest.mark.parametrize('case', [TINY_1, SMALL_1])
 def test_lex_treesearch(case):
     res, val, stats = max_weighted_support_bb(case.x, case.y, case.prop_fac(case.x))
+    assert val == case.opt_weighted_support
+    np.testing.assert_array_equal(res.support_all(case.x), case.opt_weighted_support_set)
+
+@pytest.mark.parametrize('case', [TINY_1, SMALL_1])
+def test_interval_pattern_search(case):
+    res, val, stats = max_weighted_support_fips(case.x, case.y)
     assert val == case.opt_weighted_support
     np.testing.assert_array_equal(res.support_all(case.x), case.opt_weighted_support_set)
 

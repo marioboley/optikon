@@ -5,9 +5,9 @@
 
 import numpy as np
 
-from numba import njit
+from numba import njit, types
 from numba.experimental import jitclass
-from numba.types import int64, float64
+from numba.types import int64, float64, intp
 from numba.typed import List
 import numba.types as numbatypes
 # from numba.types import unicode_type
@@ -549,27 +549,8 @@ full_propositionalization.compile('(float64[:, :],)')
 equal_width_propositionalization.compile('(float64[:, :],)')
 equal_width_propositionalization_sorted.compile('(float64[:, :],)')
 
-##### Lexicographic Tree Search #####
-#####################################
-
-@jitclass
-class LexTreeSearchNode:
-    
-    key: int64[:]
-    critical: int64[:]
-    remaining: int64[:]
-    support: int64[:]
-    pos_support: int64[:]
-
-    def __init__(self, key, critical, remaining, support, pos_support):
-        self.key = key
-        self.critical = critical
-        self.remaining = remaining
-        self.support = support
-        self.pos_support = pos_support
-
-# NODE_TYPE = Node.class_type.instance_type  
-NodeHeap = make_maxheap_class(float64, LexTreeSearchNode.class_type.instance_type)
+##### Fast Interval Pattern Search   #####
+##########################################
 
 @jitclass
 class IntervalPatternSearchNode:
@@ -623,6 +604,246 @@ def make_interval_search_root(x, w):
     
 IntervallPatternNodeHeap = make_maxheap_class(float64, IntervalPatternSearchNode.class_type.instance_type)
 
+@njit
+def range_preserving_suffix_and_prefix(x):
+    """
+    Computes smallest suffix and prefix of x that preserve range (min and max 
+    values are retained).
+
+    Args:
+        x (ndarray): non-empty array of shape (m,).
+
+    Returns:
+        Tuple[int, int]: (i, j) such that i is the largest index such that at least on
+        occurrences of each x.min() and x.max() are still present in x[i:], and j is
+        the smallest index j such that at least one of those occurrences are
+        still present in x[:j+1].
+
+    Note:
+        The function runs in O(m)
+
+    Examples:
+        >>> range_preserving_suffix_and_prefix(np.array([1., 2., 3., 4., 5.]))
+        (0, 4)
+        >>> range_preserving_suffix_and_prefix(np.array([2., 2., 2., 2., 2.]))
+        (4, 0)
+        >>> range_preserving_suffix_and_prefix(np.array([2., 1., 3., 4., 5.]))
+        (1, 4)
+        >>> range_preserving_suffix_and_prefix(np.array([4., 2., 2., 3., 4.]))
+        (2, 1)
+    """
+    m = x.shape[0]
+    z_min = x.min()
+    z_max = x.max()
+    count_z_min = (x == z_min).sum()
+    count_z_max = (x == z_max).sum()
+
+    z_min_remaining = count_z_min
+    z_max_remaining = count_z_max
+    i = 0
+    while i < m and z_min_remaining > 0 and z_max_remaining > 0:
+        if x[i] == z_min:
+            z_min_remaining -= 1
+        if x[i] == z_max:
+            z_max_remaining -= 1
+        i += 1
+
+    z_min_remaining = count_z_min
+    z_max_remaining = count_z_max
+    j = m - 1
+    while j >= 0 and z_min_remaining > 0 and z_max_remaining > 0:
+        if x[j] == z_min:
+            z_min_remaining -= 1
+        if x[j] == z_max:
+            z_max_remaining -= 1
+        j -= 1
+
+    return i - 1, j + 1
+
+@njit
+def prefix_preserving_index_bounds(x, orders, min_k=0):
+    """
+    Computes longest non-empty prefix-preserving index ranges for each variable in a dataset.
+
+    Specifically, for each variable k >= min_k, this function computes:
+      - the largest index l for restricting the dataset via x[:, k] >= x[orders[l, k]],
+        or equivalently to x[orders[l:, k]], and
+      - the smallest index u for restricting the dataset via x[:, k] <= x[orders[u, k]]
+        or equivalently to x[orders[:u+1, k]]
+    such that those restrictions do not reduce the value range of all variables j < k.
+
+    Args:
+        x (ndarray): A dataset of shape (m, d).
+        orders (ndarray): An array of shape (m, d), where each column contains the 
+            indices that would sort x[:, k] in ascending order.
+        min_k (int): smallest index for which to compute value ranges
+
+    Returns:
+        Tuple[ndarray, ndarray]: Two arrays of shape (d,), where the first contains 
+        the maximal prefix-preserving lower-bound indices, and the second contains 
+        the minimal prefix-preserving upper-bound indices. Arrays are padded with 
+        default values n-1 and 0 for max lower and min upper bounds indices, respectively,
+
+    Notes:
+        - The function runs in time O((d-min_k)^2 m) <= O(d^2 m)
+        - Default values for k < min_k are n-1 and 0
+
+    Examples:
+        >>> import numpy as np
+        >>> x = np.array([[0.1, 1.0, -0.5], 
+        ...               [0.3, 2.0, -1.0],
+        ...               [0.2, 0.5, 0.0]])
+        >>> orders = np.argsort(x, axis=0)
+        >>> l, u = prefix_preserving_index_bounds(x, orders)
+        >>> np.round(l, 2)
+        array([2, 1, 0])
+        >>> np.round(u, 2)
+        array([0, 2, 2])
+    """
+    n, d = x.shape
+    max_pp_lb_indices = np.full(d, n-1, dtype=np.int64)
+    min_pp_ub_indices = np.full(d, 0, dtype=np.int64)
+
+    for k in range(min_k, d):
+        for j in range(k):
+            l, u = range_preserving_suffix_and_prefix(x[orders[:, k], j])
+            if l < max_pp_lb_indices[k]:
+                max_pp_lb_indices[k] = l
+            if u > min_pp_ub_indices[k]:
+                min_pp_ub_indices[k] = u
+
+    return max_pp_lb_indices, min_pp_ub_indices
+
+@njit
+def max_weighted_support_fips(x, w, max_depth=4):
+    _, d = x.shape
+    heap = IntervallPatternNodeHeap()
+    
+    root = make_interval_search_root(x, w)
+    root_bound = w[root.pos_support].sum()
+    root_value = w.sum()
+    heap.push(root_bound, root)
+
+    best_value = root_value
+    best_node = root
+    nodes_created = 1
+    nodes_enqueued = 1
+
+    while heap:
+        bound, node = heap.pop()
+
+        if len(node.support) == 0:
+            print('warning: zero support dequeued')
+            continue
+
+        if bound < best_value:
+            continue
+        if node.num_non_trivial_bounds() >= max_depth:
+            continue
+
+        x_sub = x[node.support]
+        sub_orders = argsort_columns(x_sub) # np.argsort(x_sub, axis=0)
+        x_sub_pos = x[node.pos_support]
+        w_sub = w[node.support]
+        w_sub_pos = w[node.pos_support]
+        
+        max_pp_lb, min_pp_ub = prefix_preserving_index_bounds(x_sub, sub_orders, node.min_active_j)
+
+        for j in range(node.min_active_j, d):
+
+            # should we create view: vals = x_sub[sub_orders[:, j], j]
+            # or would this be detremental for performance?
+
+            col_data = x_sub[:, j]
+            order = sub_orders[:, j]
+            pos_col_data = x_sub_pos[:, j]
+
+            if np.isneginf(node.l[j]):
+                
+                # create all canonical nodes from lower bounds
+
+                sum_w = w_sub.sum()
+                sum_pos_w = w_sub_pos.sum()
+
+                for i in range(1, max_pp_lb[j]+1):
+                    t = col_data[order[i]]
+                    w_rem = w_sub[order[i-1]]
+                    sum_w -= w_rem
+                    if w_rem > 0:
+                        sum_pos_w -= w_rem
+
+                    if t > col_data[order[i-1]]:
+                        _l = node.l.copy()
+                        _l[j] = t
+                        _sup = node.support[np.flatnonzero(col_data >= t)]
+                        _pos_sup = node.pos_support[np.flatnonzero(pos_col_data >= t)]
+                        # probably cheaper but changes order: _sup = node.support[order[i:]]
+                        
+                        child = IntervalPatternSearchNode(_l, node.u, _sup, _pos_sup, j)
+                        nodes_created += 1
+                        if sum_w > best_value:
+                            best_value = sum_w
+                            best_node = child
+                        if sum_pos_w > best_value:
+                            heap.push(sum_pos_w, child)
+                            nodes_enqueued += 1
+                        else:
+                            break
+                        
+            # create all canonical nodes from upper bounds
+            sum_w = w_sub.sum()
+            sum_pos_w = w_sub_pos.sum()
+            for i in range(len(node.support)-2, min_pp_ub[j]-1, -1):
+                t = col_data[order[i]] 
+                w_rem = w_sub[order[i+1]]
+                sum_w -= w_rem
+                if w_rem > 0:
+                    sum_pos_w -= w_rem
+                if t < col_data[order[i+1]]:
+                    _u = node.u.copy()
+                    _u[j] = t
+                    _sup = node.support[np.flatnonzero(col_data <= t)]
+                    _pos_sup = node.pos_support[np.flatnonzero(pos_col_data <= t)]
+                    # probably cheaper but changes order: _sup = node.support[order[:i+1]]
+                    child = IntervalPatternSearchNode(node.l, _u, _sup, _pos_sup, j+1)
+                    nodes_created += 1
+                    if sum_w > best_value:
+                        best_value = sum_w
+                        best_node = child
+                    if sum_pos_w > best_value:
+                        heap.push(sum_pos_w, child)
+                        nodes_enqueued += 1
+                    else:
+                        break
+
+    return best_node.to_propositionalization(), best_value, {'nodes_created': nodes_created,
+                                                             'nodes_enqueued': nodes_enqueued}
+
+max_weighted_support_fips.compile((types.Array(float64, 2, 'C'), types.Array(float64, 1, 'C'), intp))
+max_weighted_support_fips.compile((types.Array(float64, 2, 'F'), types.Array(float64, 1, 'C'), intp))
+max_weighted_support_fips.compile((types.Array(float64, 2, 'A'), types.Array(float64, 1, 'A'), intp))
+
+##### Lexicographic Treesearch   #####
+######################################
+
+@jitclass
+class LexTreeSearchNode:
+    
+    key: int64[:]
+    critical: int64[:]
+    remaining: int64[:]
+    support: int64[:]
+    pos_support: int64[:]
+
+    def __init__(self, key, critical, remaining, support, pos_support):
+        self.key = key
+        self.critical = critical
+        self.remaining = remaining
+        self.support = support
+        self.pos_support = pos_support
+
+# NODE_TYPE = Node.class_type.instance_type  
+NodeHeap = make_maxheap_class(float64, LexTreeSearchNode.class_type.instance_type)
 
 @njit
 def make_lex_treesearch_root(x, y, prop):
@@ -645,6 +866,7 @@ def max_weighted_support_bb(x, y, prop, max_depth=4):
     best_key = root.key
     best_val = root_value
     nodes_created = 1
+    nodes_enqueued = 1
     candidate_edges = 0
 
     while heap:
@@ -669,6 +891,7 @@ def max_weighted_support_bb(x, y, prop, max_depth=4):
 
             _val = y[_sup].sum()
             _bound = y[_pos_sup].sum()
+            nodes_created += 1
 
             if _val > best_val:
                 best_val = _val
@@ -689,9 +912,10 @@ def max_weighted_support_bb(x, y, prop, max_depth=4):
 
             heap.push(_bound, LexTreeSearchNode(_key, _crit, _rem, _sup, _pos_sup))
 
-            nodes_created += 1
+            nodes_enqueued += 1
 
     return prop[best_key], best_val, {'nodes_created': nodes_created,
+                                      'nodes_enqueued': nodes_enqueued,
                                       'candidate_edges': candidate_edges}
     
 ##### Greedy Search #####
