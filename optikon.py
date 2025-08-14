@@ -69,9 +69,20 @@ def compute_bounds(x):
                 u[j] = x[i, j]
     return l, u
 
+@njit
+def num_finite_bounds(l, u):
+    res = 0
+    for j in range(len(l)):
+        if l[j] > -np.inf:
+            res += 1
+        if u[j] < np.inf:
+            res += 1
+    return res
+
 sort_columns.compile("(float64[:, :],)")
 argsort_columns.compile("(float64[:, :],)")
 compute_bounds.compile("(float64[:, :],)")
+num_finite_bounds.compile('(float64[:], float64[:])')
 
 def make_maxheap_class(KeyType, NodeType):
     """Create a max-heap jitclass specialized for the given KeyType and NodeType.
@@ -436,6 +447,27 @@ def full_propositionalization(x):
 
     return Propositionalization(v_out[:count], t_out[:count], s_out[:count])
 
+@njit
+def propositionalization_from_intervals(l, u):
+    k = num_finite_bounds(l, u)
+    v = np.zeros(k, dtype=np.int64)
+    t = np.zeros(k, dtype=np.float64)
+    s = np.zeros(k, dtype=np.int64)
+
+    r = 0        
+    for j in range(len(l)):
+        if l[j] > -np.inf:
+            v[r] = j
+            t[r] = l[j]
+            s[r] = 1
+            r += 1
+        if u[j] < np.inf:
+            v[r] = j
+            t[r] = -u[j]
+            s[r] = -1
+            r += 1
+    return Propositionalization(v, t, s)
+
 def equal_frequency_propositionalization(x, k=None):
     n, d = x.shape
     k = k if k is not None else 2*np.ceil(n**(1/3)).astype(int)
@@ -544,6 +576,37 @@ def equal_width_propositionalization_sorted(x_sorted):
 def empty_propositionalization(x=None):
     return Propositionalization(np.empty(0, dtype=np.int64), np.empty(0, dtype=np.float64), np.empty(0, dtype=np.int64))
 
+@njit
+def apx_minsize_conj_descr(x, support):
+    n = x.shape[0]
+    
+    complement_mask = np.ones(n, np.bool_)
+    complement_mask[support] = False
+    complement = np.flatnonzero(complement_mask)
+
+    l, u = compute_bounds(x[support])
+    props = propositionalization_from_intervals(l, u)
+    selected = np.zeros(len(props), dtype=np.bool_)
+
+    while len(complement) > 0:
+        best_p = -1
+        best_new_compl = complement
+        for p in range(len(props)):
+            if selected[p]:
+                continue
+            compl_p = complement[props.s[p]*x[complement, props.v[p]] >= props.t[p]]
+            if len(compl_p) < len(best_new_compl):
+                best_p = p
+                best_new_compl = compl_p
+        
+        if best_p > -1:
+            selected[best_p] = True
+            complement = best_new_compl
+        else:
+            break
+
+    return props[np.flatnonzero(selected)]
+
 empty_propositionalization.compile('(float64[:, :],)')
 full_propositionalization.compile('(float64[:, :],)')
 equal_width_propositionalization.compile('(float64[:, :],)')
@@ -567,34 +630,34 @@ class IntervalPatternSearchNode:
         self.pos_support = pos_support
         self.min_active_j = min_active_j
 
-    def num_non_trivial_bounds(self):
-        res = 0
-        for j in range(len(self.l)):
-            if self.l[j] > -np.inf:
-                res += 1
-            if self.u[j] < np.inf:
-                res += 1
-        return res
+    # def num_non_trivial_bounds(self):
+    #     res = 0
+    #     for j in range(len(self.l)):
+    #         if self.l[j] > -np.inf:
+    #             res += 1
+    #         if self.u[j] < np.inf:
+    #             res += 1
+    #     return res
 
-    def to_propositionalization(self):
-        k = self.num_non_trivial_bounds()
-        v = np.zeros(k, dtype=np.int64)
-        t = np.zeros(k, dtype=np.float64)
-        s = np.zeros(k, dtype=np.int64)
+    # def to_propositionalization(self):
+    #     k = self.num_non_trivial_bounds()
+    #     v = np.zeros(k, dtype=np.int64)
+    #     t = np.zeros(k, dtype=np.float64)
+    #     s = np.zeros(k, dtype=np.int64)
 
-        r = 0        
-        for j in range(len(self.l)):
-            if self.l[j] > -np.inf:
-                v[r] = j
-                t[r] = self.l[j]
-                s[r] = 1
-                r += 1
-            if self.u[j] < np.inf:
-                v[r] = j
-                t[r] = -self.u[j]
-                s[r] = -1
-                r += 1
-        return Propositionalization(v, t, s)
+    #     r = 0        
+    #     for j in range(len(self.l)):
+    #         if self.l[j] > -np.inf:
+    #             v[r] = j
+    #             t[r] = self.l[j]
+    #             s[r] = 1
+    #             r += 1
+    #         if self.u[j] < np.inf:
+    #             v[r] = j
+    #             t[r] = -self.u[j]
+    #             s[r] = -1
+    #             r += 1
+    #     return Propositionalization(v, t, s)
 
 @njit
 def make_interval_search_root(x, w):
@@ -738,7 +801,7 @@ def max_weighted_support_fips(x, w, max_depth=4):
 
         if bound < best_value:
             continue
-        if node.num_non_trivial_bounds() >= max_depth:
+        if num_finite_bounds(node.l, node.u) >= max_depth:
             continue
 
         x_sub = x[node.support]
@@ -816,7 +879,8 @@ def max_weighted_support_fips(x, w, max_depth=4):
                     else:
                         break
 
-    return best_node.to_propositionalization(), best_value, {'nodes_created': nodes_created,
+    return propositionalization_from_intervals(best_node.l, best_node.u), \
+                                               best_value, {'nodes_created': nodes_created,
                                                              'nodes_enqueued': nodes_enqueued}
 
 max_weighted_support_fips.compile((types.Array(float64, 2, 'C'), types.Array(float64, 1, 'C'), intp))
