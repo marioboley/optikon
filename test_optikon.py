@@ -1,7 +1,7 @@
 import numpy as np
 import numba as nb
 import pytest
-from optikon import sort_columns, compute_bounds, make_maxheap_class, max_weighted_support_bb, max_weighted_support_fips, greedy_maximization, Propositionalization, full_propositionalization, equal_width_propositionalization, empty_propositionalization, WeightedSupport, NormalizedWeightedSupport
+from optikon import sort_columns, compute_bounds, make_maxheap_class, max_weighted_support_bb, max_weighted_support_fips, greedy_maximization, Propositionalization, full_propositionalization, equal_width_propositionalization, empty_propositionalization, WeightedSupport, NormalizedWeightedSupport, apx_minsize_conj_descr
 from testdata import SMALL_1, TINY_1
 from math import isclose
 
@@ -82,6 +82,25 @@ def test_equal_width_prop():
     x = np.linspace(0, 12, 27).reshape(-1, 1)
     prop = equal_width_propositionalization(x)
     assert len(prop) == 4
+
+def test_min_conj_descr_apx():
+    support = np.array([0, 2, 3, 5, 6, 7, 8])
+    x = np.array([[-0.18 , -0.054, -0.242,  0.406],
+                  [ 0.645, -0.027, -1.275,  0.199],
+                  [-0.219,  0.716, -0.564, -1.164],
+                  [ 1.704,  2.145, -1.066, -2.438],
+                  [ 0.237, -0.044, -1.075, -0.453],
+                  [ 0.938, -0.456,  0.326, -0.25 ],
+                  [-0.657, -0.303,  1.409,  0.488],
+                  [ 0.497,  0.313,  0.196, -0.835],
+                  [ 0.457, -0.159, -0.245,  0.039],
+                  [ 0.438, -0.205, -1.457, -0.377],
+                  [ 1.922,  0.408, -1.565, -0.085],
+                  [-0.401, -1.075, -1.238,  0.599]])
+    res = apx_minsize_conj_descr(x, support)
+    assert np.array_equal(res.support_all(x), support)
+    assert res.as_conj_str() == 'x3 >= -1.066'
+                       
 
 def test_propositionalisation_fancy_indexing():
     v = np.array([0, 1, 2, 3], dtype=np.int64)
